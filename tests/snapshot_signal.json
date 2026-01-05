@@ -1,0 +1,22 @@
+{
+    "Metadata": {
+        "Rows": 1460,
+        "Columns": 81,
+        "Numerical Columns Ratio": 0.4691358024691358,
+        "Valid Categorical Columns Ratio": 0.5308641975308642,
+        "Feature to Row Ratio": 0.05547945205479452,
+        "Memory (MB)": 0.8614
+    },
+    "Health Check": {
+        "missing_ratio": 0.067,
+        "constant_ratio": 0.9993,
+        "duplicated_ratio": 0.0
+    },
+    "Complexity profile": {
+        "Multicollinearity": 0.006,
+        "Cardinality": 0.0042,
+        "Outliers": 0.6068,
+        "Mixed": 0.0
+    },
+    "Target Profile": 0.0137
+}
