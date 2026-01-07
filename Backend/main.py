@@ -3,9 +3,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
+import sys
+from pathlib import Path
+
+# Add parent directory to path so we can import the engine module
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Internal Imports
-from .file_support_check import validate_and_load  # Moved to Backend folder
+from file_support_check import validate_and_load  # Moved to Backend folder
 from engine.main_engine import main_engine
 
 app = FastAPI()

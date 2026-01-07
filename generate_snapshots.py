@@ -3,6 +3,7 @@ import os
 import json
 from engine.Layer_1 import normalizing_dtypes
 from engine.Layer_1 import signals
+from engine.Layer_1 import logic
 
 def create_test_data():
     if not os.path.exists("tests"):
@@ -19,6 +20,10 @@ def create_test_data():
     df_signals = signals.run_signals_extraction(df_norm, df_norm['SalePrice'])
     with open('tests/snapshot_signal.json', 'w') as f:
         json.dump(df_signals, f, indent=4)
+        
+    df_logic = logic.run_logic_extraction(df_norm, df_signals)
+    with open('tests/snapshot_logic.json', 'w') as f:
+        json.dump(df_logic, f, indent=4)
         
     print("Snapshots created in /tests folder!")
 

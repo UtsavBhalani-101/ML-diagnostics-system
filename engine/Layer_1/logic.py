@@ -1,26 +1,43 @@
 import pandas as pd
 import numpy as np
-from typing import Any, Optional
 
 
 #^ key facts - dimensions
-def key_facts_dimensions(df: dict):
-    # Key facts
+def extract_dataset_dimensions(signals: dict) -> dict:
+    rows = signals["Metadata"]["Rows"]
+    cols = signals["Metadata"]["Columns"]
 
-    # dimesions
-    row = df['Metadata']['rows']
-    col = df['Metadata']['cols']
-    dimesions = f"{row} x {col}"
-    return dimesions
+    return {
+        "rows": rows,
+        "columns": cols,
+        "shape": f"{rows} x {cols}",
+        "scale_class": (
+            "small" if rows < 1_000 else
+            "medium" if rows < 100_000 else
+            "large"
+        )
+    }
+
 
 #^ key facts - memory 
-def key_facts_memory(df: dict):
-    # deep=True is essential to get the actual memory of 'object' (string) types
-    ...
+def extract_memory_footprint(signals: dict) -> dict:
+    memory_mb = signals["Metadata"]["Memory (MB)"]
+
+    return {
+        "memory_mb": round(memory_mb, 3),
+        "memory_class": (
+            "light" if memory_mb < 10 else
+            "moderate" if memory_mb < 500 else
+            "heavy"
+        )
+    }
+
 
 #^ key facts - feature mix
-def key_facts_feature_mix(df: dict):
-    
+def extract_feature_mix(df: pd.DataFrame):
+    num_ratio = df['Metadata']['Numerical Columns Ratio']
+    cat_ratio = df['Metadata']['Valid Categorical Columns Ratio'] #! fix this valid name thing from the signal
+    mix_type = ""
 
     if cat_ratio >= 0.55:
         mix_type = "Categorical Dominant (High Complexity)"
@@ -46,41 +63,243 @@ def key_facts_feature_mix(df: dict):
         "cat_ratio": round(cat_ratio, 3)
     }
 
-#! checking missingness
-def analyze_missingness(df: pd.DataFrame, critical_threshold=0.30):
-    # 1. Global Metrics
-    total_cells = df.size
-    total_missing = df.isna().sum().sum()
-    global_pct = (total_missing / total_cells) * 100 if total_cells > 0 else 0
-
-    # 2. Column-Level Metrics (The "Skew" Check)
-    # Calculate missingness percentage for every column
-    col_missing_pct = df.isna().mean()
+#^ checking missingness
+def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshold=0.30):
+    # Get the global ratio from signal_output
+    global_missing = signal_output['Health Check']['missing_ratio']
     
-    # Identify columns that cross the 'Critical' threshold (e.g., 30%)
-    critical_cols = col_missing_pct[col_missing_pct > critical_threshold]
-    critical_list = critical_cols.index.tolist()
-
-    # 3. Risk Categorization
-    if global_pct < 5 and len(critical_list) == 0:
-        risk_status = "Low Risk: Dataset is clean."
-    elif len(critical_list) > 0:
-        risk_status = f"Medium-High Risk: {len(critical_list)} Critical Columns identified."
-    else:
-        risk_status = "Medium Risk: High global missingness but distributed evenly."
-
-    # 4. Final Output Representation
-    return {
-        "global_missing_pct": f"{global_pct:.2f}%",
-        "risk_level": risk_status,
-        "critical_columns_detected": len(critical_list),
-        "critical_column_details": {
-            col: f"{col_missing_pct[col]:.1%}" for col in critical_list
-        },
-        "action_required": "Drop critical columns or use iterative imputation" if critical_list else "None"
+    # Calculate per-column missingness using the raw DF passed by the runner
+    col_missing_ratios = df.isnull().mean()
+    critical_cols = col_missing_ratios[col_missing_ratios > critical_threshold].index.tolist()
+    critical_count = len(critical_cols)
+    
+    assumptions = {}
+    
+    # Check 1: General volume
+    assumptions["Data is mostly complete"] = {
+        "status": "valid" if global_missing < 0.10 else "weak",
+        "evidence": {"missing_ratio": round(global_missing, 4)}
     }
 
+    # Check 2: Structural holes
+    assumptions["Missingness is not structural"] = {
+        "status": "broken" if critical_count > 0 else "valid",
+        "evidence": {"critical_columns_found": critical_count}
+    }
 
+    constraints = []
+    if critical_count > 0:
+        constraints.append(f"Row-wise deletion unsafe; high missingness in: {critical_cols}")
+
+    return assumptions, constraints
+   
+#^ checking duplicates  
+def analyze_duplicates(signal_output:dict):
+    duplicates_ratio = signal_output['Health Check']['duplicated_ratio']
+    
+    assumptions = {}
+    
+    if duplicates_ratio < 0.01:
+        status = "valid"
+    elif duplicates_ratio < 0.05:
+        status = "weak"
+    else:
+        status = "broken"
+    
+    assumptions['Duplicate rows are negligible'] = {
+        "status": status,
+        "evidence" : {"duplicated_ratio" : duplicates_ratio}
+    }
+    
+    constraints = []
+    if status == "weak":
+        constraints.append("Minor row-level bias detected; consider deduplication.")
+    elif status == "broken":
+        constraints.append("CRITICAL: Significant row-level bias. Statistics are unreliable.")
+        
+
+    return assumptions, constraints
+
+#^ checking constant 
+def analyze_constant_features(signal_output: dict):
+    mean_constant = signal_output["Health Check"]["constant_ratio"]["mean_ratio"]
+    max_constant = signal_output["Health Check"]["constant_ratio"]["max_ratio"]
+
+    assumptions = {}
+
+    # A4: Global feature information density
+    if mean_constant <= 0.65:
+        status_global = "valid"
+    elif mean_constant <= 0.85:
+        status_global = "weak"
+    else:
+        status_global = "broken"
+
+    assumptions["Most features carry information"] = {
+        "status": status_global,
+        "evidence": {
+            "mean_constant_ratio": mean_constant
+        }
+    }
+
+    # A4b: Presence of degenerate features
+    if max_constant < 0.95:
+        status_local = "valid"
+    elif max_constant < 0.99:
+        status_local = "weak"
+    else:
+        status_local = "broken"
+
+    assumptions["No degenerate features exists"] = {
+        "status": status_local,
+        "evidence": {
+            "max_constant_ratio": max_constant
+        }
+    }
+
+    constraints = []
+
+    if status_global in ["weak", "broken"]:
+        constraints.append(
+            "Global feature signal density is low; aggregate statistics may be diluted"
+        )
+
+    if status_local in ["weak", "broken"]:
+        constraints.append(
+            "Some features may be non-informative and distort feature importance estimates"
+        )
+
+    return assumptions, constraints
+
+#^ checking cardinality
+def analyze_cardinality(signal_output: dict):
+    cardinality_ratio = signal_output["Complexity profile"]["Cardinality"]
+    
+    assumptions = {}
+    
+
+    if cardinality_ratio <= 0.2:
+        status = "valid"
+    elif cardinality_ratio <= 0.8:
+        status = "weak"
+    else:
+        status = "broken"
+        
+    
+    assumptions["Cardinality is manageable"] = {
+        "status": status,
+        "evidence": {"cardinality_ratio": cardinality_ratio}
+    }
+    
+    constraints = []
+    if status in ["weak", "broken"]:
+        constraints.append("Naive categorical encoding may cause dimensions explosion")
+    
+    return assumptions, constraints
+
+#^ checking multicollinearity
+def analyze_multicollinearity(signal_output: dict):
+    ratio = signal_output["Complexity profile"]["Multicollinearity"]
+    
+    if ratio <= 0.05:
+        status = "valid"
+    elif ratio <= 0.15:
+        status = "weak"
+    else:
+        status = "broken"
+    
+    assumptions = {}
+    assumptions["Strong multicollinearity is limited"] = {
+        "status": status,
+        "evidence": {"multicollinearity_density": ratio} 
+    }
+    
+    constraints = []
+    if status in ["weak", "broken"]:
+        constraints.append("Linear feature weights are unreliable")
+        
+    return assumptions, constraints
+
+#^ detecting outliers
+def analyze_outliers(signal_output: dict):
+    ratio = signal_output["Complexity profile"]["Outliers"]
+    
+    if ratio <= 0.1:
+        status = "valid"
+    elif ratio <= 0.25:
+        status = "weak"
+    else:
+        status = "broken"
+    
+    assumptions = {}
+    assumptions["Extreme outliers are rare"] = {
+        "status": status,
+        "evidence": {"outlier_ratio" : ratio}
+    }
+    
+    constraints = []
+    if status in ["weak", "broken"]:
+        constraints.append("Mean and scale-based statistics are unreliable")
+        
+    return assumptions, constraints
+
+#^ checking mixed
+def analyze_mixed(signal_output: dict):
+    ratio = signal_output["Complexity profile"]["Mixed"]
+    
+    if ratio == 0.0:
+        status = "valid"
+    else:
+        status = "broken"
+    
+    assumptions = {}
+    assumptions["Mixed columns are rare"] = {
+        "status" : status,
+        "evidence" : {"mixed_ratio" : ratio}
+    }
+    constraints = []
+    if status == "broken":
+        constraints.append("Column-level type assumptions are invalid")
+        
+    return assumptions, constraints
+
+#~ combined function 
+def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
+    result = {
+        "facts": {},
+        "assumptions": {},
+        "constraints": []
+    }
+
+    # Facts
+    result["facts"]["dimensions"] = extract_dataset_dimensions(signal_output)
+    result["facts"]["memory"] = extract_memory_footprint(signal_output)
+    result["facts"]["feature_mix"] = extract_feature_mix(signal_output)
+
+    # Logic checks (NO KEYS)
+    logic_functions = [
+        lambda: analyze_missingness(df, signal_output),
+        lambda: analyze_duplicates(signal_output),
+        lambda: analyze_constant_features(signal_output),
+        lambda: analyze_cardinality(signal_output),
+        lambda: analyze_multicollinearity(signal_output),
+        lambda: analyze_outliers(signal_output),
+        lambda: analyze_mixed(signal_output),
+    ]
+
+    for fn in logic_functions:
+        asm, cons = fn()
+
+        # Merge assumptions (flat)
+        for k, v in asm.items():
+            if k in result["assumptions"]:
+                raise ValueError(f"Duplicate assumption ID: {k}")
+            result["assumptions"][k] = v
+
+        # Merge constraints (list)
+        result["constraints"].extend(cons)
+
+    return result
 
 
 if __name__ == "__main__":

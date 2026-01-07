@@ -9,13 +9,16 @@
     },
     "Health Check": {
         "missing_ratio": 0.067,
-        "constant_ratio": 0.9993,
+        "constant_ratio": {
+            "max_ratio": 0.9993,
+            "mean_ratio": 0.5963
+        },
         "duplicated_ratio": 0.0
     },
     "Complexity profile": {
         "Multicollinearity": 0.006,
         "Cardinality": 0.0042,
-        "Outliers": 0.6068,
+        "Outliers": 0.0299,
         "Mixed": 0.0
     },
     "Target Profile": 0.0137

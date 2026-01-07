@@ -70,9 +70,9 @@ def get_metadata(df):
 #^ constant ratio  
 def get_global_constant_ratio(df: pd.DataFrame):
     if df.empty:
-        return 0.0
+        return {"max_ratio": 0.0, "mean_ratio": 0.0}
 
-    max_ratio = 0.0
+    all_ratios = []
 
     for col in df.columns:
         s = df[col].dropna()
@@ -80,9 +80,18 @@ def get_global_constant_ratio(df: pd.DataFrame):
             continue
 
         ratio = s.value_counts(normalize=True).iloc[0]
-        max_ratio = max(max_ratio, ratio)
+        all_ratios.append(ratio)
 
-    return round(max_ratio, 4)
+    if not all_ratios:
+        return {"max_ratio": 0.0, "mean_ratio": 0.0}
+    
+    max_ratio = max(all_ratios)
+    mean_ratio = sum(all_ratios) / len(all_ratios)
+
+    return {
+        "max_ratio": round(max_ratio, 4),
+        "mean_ratio": round(mean_ratio, 4)
+    }
     
     
 #^ Health Signals
@@ -90,14 +99,14 @@ def get_health_signals(df: pd.DataFrame, target: pd.Series):
     rows, cols = df.shape
 
     missing_ratio = df.isnull().sum().sum() / df.size if df.size else 0.0
-    constant_ratio = get_global_constant_ratio(df)
+    constant_ratio = get_global_constant_ratio(df)  # Now returns {"max_ratio": ..., "mean_ratio": ...}
     duplicated_ratio = df.duplicated().mean() if rows else 0.0
 
     target_dist = target.value_counts(normalize=True)
 
     return {
         "missing_ratio": round(missing_ratio, 4),
-        "constant_ratio": round(constant_ratio, 4),
+        "constant_ratio": constant_ratio,  # Nested dictionary with max_ratio and mean_ratio
         "duplicated_ratio": round(duplicated_ratio, 4),
     }
 
@@ -138,22 +147,31 @@ def get_global_cardinality(df, valid_cat_cols=None):
     return round(sum(ratios) / len(ratios), 4) if ratios else 0.0
 
 #^ Outliers
-def get_global_outlier_ratio(df):
+def get_global_outlier_ratio(df, multiplier=1.5):
+    # 1. Select numeric features
     num_df = df.select_dtypes(include=["number"])
-
-    # Drop constant columns
-    num_df = num_df.loc[:, num_df.nunique() > 1]
-
-    if num_df.empty:
+    
+    if num_df.empty or num_df.shape[1] == 0:
         return 0.0
-
+    
+    # 2. Calculate IQR bounds per column
     q1 = num_df.quantile(0.25)
     q3 = num_df.quantile(0.75)
     iqr = q3 - q1
-
-    outlier_mask = (num_df < (q1 - 1.5 * iqr)) | (num_df > (q3 + 1.5 * iqr))
-
-    return round(outlier_mask.any(axis=1).mean(), 4)
+    
+    # 3. Define thresholds per column
+    lower = q1 - (multiplier * iqr)
+    upper = q3 + (multiplier * iqr)
+    
+    # 4. Create outlier mask (True = outlier)
+    outlier_mask = (num_df < lower) | (num_df > upper)
+    
+    # 5. Column-wise: Calculate outlier ratio for EACH column, then average
+    # This is more robust as each column contributes equally
+    column_outlier_ratios = outlier_mask.mean(axis=0)  # Fraction of outliers per column
+    
+    # 6. Average across all columns
+    return round(column_outlier_ratios.mean(), 4)
 
 #^ Mixed type ratio
 def get_global_mixed_type_ratio(df):
@@ -207,10 +225,7 @@ def get_target_profile(df:pd.DataFrame, target:pd.Series):
     else:
         concentration = get_target_concentration_ratio(target)
         return concentration
-    
-
-    
-        
+     
 
 def run_signals_extraction(df: pd.DataFrame, target:pd.Series):
     """
@@ -219,7 +234,8 @@ def run_signals_extraction(df: pd.DataFrame, target:pd.Series):
     """
     # Define a default target (pragmatic approach: use the last column)
     target = target
-    features = df.drop(['SalePrice'], axis=1)
+    features = df.drop(['SalePrice'], axis=1)  
+    #! idealy this should be target but the generate snapshot code breaks in the process
 
     final_result = {}
     final_result['Metadata'] = get_metadata(df)

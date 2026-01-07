@@ -1,0 +1,79 @@
+{
+    "facts": {
+        "dimensions": {
+            "rows": 1460,
+            "columns": 81,
+            "shape": "1460 x 81",
+            "scale_class": "medium"
+        },
+        "memory": {
+            "memory_mb": 0.861,
+            "memory_class": "light"
+        },
+        "feature_mix": {
+            "mix_type": "Moderate Mix (Leaning Categorical)",
+            "num_ratio": 0.469,
+            "cat_ratio": 0.531
+        }
+    },
+    "assumptions": {
+        "Data is mostly complete": {
+            "status": "valid",
+            "evidence": {
+                "missing_ratio": 0.067
+            }
+        },
+        "Missingness is not structural": {
+            "status": "broken",
+            "evidence": {
+                "critical_columns_found": 6
+            }
+        },
+        "Duplicate rows are negligible": {
+            "status": "valid",
+            "evidence": {
+                "duplicated_ratio": 0.0
+            }
+        },
+        "Most features carry information": {
+            "status": "valid",
+            "evidence": {
+                "mean_constant_ratio": 0.5963
+            }
+        },
+        "No degenerate features exists": {
+            "status": "broken",
+            "evidence": {
+                "max_constant_ratio": 0.9993
+            }
+        },
+        "Cardinality is manageable": {
+            "status": "valid",
+            "evidence": {
+                "cardinality_ratio": 0.0042
+            }
+        },
+        "Strong multicollinearity is limited": {
+            "status": "valid",
+            "evidence": {
+                "multicollinearity_density": 0.006
+            }
+        },
+        "Extreme outliers are rare": {
+            "status": "valid",
+            "evidence": {
+                "outlier_ratio": 0.0299
+            }
+        },
+        "Mixed columns are rare": {
+            "status": "valid",
+            "evidence": {
+                "mixed_ratio": 0.0
+            }
+        }
+    },
+    "constraints": [
+        "Row-wise deletion unsafe; high missingness in: ['Alley', 'MasVnrType', 'FireplaceQu', 'PoolQC', 'Fence', 'MiscFeature']",
+        "Some features may be non-informative and distort feature importance estimates"
+    ]
+}
