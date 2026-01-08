@@ -1,4 +1,3 @@
-from . import layer1_logic
 
 def print_layer1_report(result: dict) -> None:
     print("\n=== DATASET TRIAGE (LAYER 1) ===\n")

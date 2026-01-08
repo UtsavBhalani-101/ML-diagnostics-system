@@ -110,3 +110,15 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# ========================
+# Work / Scratch Files
+# ========================
+engine/Layer_2/Signals/Numeric/markdown_files
+
+
+# ========================
+# Generation / tests
+# ========================
+generate_snapshots.py
+tests/
