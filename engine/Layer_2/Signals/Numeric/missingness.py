@@ -1,96 +1,100 @@
 import pandas as pd
 import numpy as np
-from scipy import stats
 
 class NumericPlaceholderDiagnostic:
-    def __init__(self, threshold_score=70):
-        self.threshold_score = threshold_score
+    def __init__(self, score_threshold=60):
+        self.score_threshold = score_threshold
 
-    def _get_digit_entropy(self, val):
-        s_val = str(abs(int(val))) if pd.notna(val) else ""
-        return len(set(s_val)) if s_val else 10
+    def _digit_entropy(self, val):
+        s = str(abs(int(round(val))))
+        return len(set(s))
 
-    def _get_target_correlation(self, mask, target, target_type):
-        if target is None: return 0
-        valid = mask.notna() & target.notna()
-        m, t = mask[valid], target[valid]
-        
-        if m.unique().size < 2 or t.unique().size < 2: return 0
-
-        if target_type == 'regression':
-            corr, p_val = stats.pointbiserialr(m, t)
-        else:
-            contingency = pd.crosstab(m, t)
-            _, p_val, _, _ = stats.chi2_contingency(contingency)
-            corr = 0 if p_val > 0.05 else 0.5
-        return abs(corr)
-
-    def diagnose_column(self, col, target=None, target_type='regression'):
+    def diagnose(self, col: pd.Series):
         total_rows = len(col)
-        # Handle standard NaNs first
-        actual_nan_count = col.isna().sum()
-        
-        # Clean numeric conversion for placeholder analysis
-        numeric_col = pd.to_numeric(col, errors='coerce')
-        vals = numeric_col.dropna().unique()
-        
-        placeholder_rows = 0
-        detected_values = []
+        numeric = pd.to_numeric(col, errors="coerce")
 
-        if len(vals) >= 3:
-            candidates = [np.max(vals), np.min(vals)]
-            # Add most frequent value if it's not the mean/median
-            mode_val = numeric_col.mode()[0]
-            if mode_val not in candidates:
-                candidates.append(mode_val)
+        actual_nan_count = numeric.isna().sum()
+        non_null = numeric.dropna()
 
-            for val in set(candidates):
+        placeholder_mask = pd.Series(False, index=col.index)
+        violations = []
+
+        if non_null.nunique() >= 3:
+            vals = non_null.unique()
+
+            candidates = {non_null.min(), non_null.max()}
+
+            # MODE DOMINANCE CHECK
+            mode_val = non_null.mode().iloc[0]
+            mode_freq = (non_null == mode_val).mean()
+            avg_freq = 1 / non_null.nunique()
+
+            if mode_freq > 5 * avg_freq:
+                candidates.add(mode_val)
+
+            sorted_vals = np.sort(vals)
+            diffs = np.diff(sorted_vals)
+            med_diff = np.median(diffs) if np.median(diffs) > 0 else 1
+
+            for val in candidates:
                 score = 0
-                # 1. Gap Analysis
-                sorted_vals = np.sort(vals)
-                diffs = np.diff(sorted_vals)
-                med_diff = np.median(diffs) if np.median(diffs) != 0 else 1
-                gap = abs(val - sorted_vals[-2]) if val == sorted_vals[-1] else abs(val - sorted_vals[1])
-                if (gap / med_diff) > 50: score += 30
-                
-                # 2. Entropy
-                if self._get_digit_entropy(val) <= 2: score += 20
-                if val % 10 == 0: score += 10
-                
-                # 3. Target Correlation
-                mask = (numeric_col == val)
-                corr = self._get_target_correlation(mask, target, target_type)
-                if corr < 0.05: score += 40
-                elif corr > 0.2: score -= 50
+                evidence = {}
 
-                if score >= self.threshold_score:
-                    placeholder_rows += mask.sum()
-                    detected_values.append(val)
+                # GAP ANALYSIS
+                if val == sorted_vals[-1]:
+                    gap = abs(val - sorted_vals[-2])
+                elif val == sorted_vals[0]:
+                    gap = abs(sorted_vals[1] - val)
+                else:
+                    gap = 0
 
-        # Combine actual NaNs and identified placeholders
-        total_missing = actual_nan_count + placeholder_rows
-        missing_ratio = round(total_missing / total_rows, 4)
-        
-        # Determine status
+                gap_ratio = gap / med_diff
+                if gap_ratio > 50:
+                    score += 30
+                    evidence["gap_ratio"] = round(gap_ratio, 2)
+
+                # DIGIT ENTROPY
+                entropy = self._digit_entropy(val)
+                if entropy <= 2:
+                    score += 20
+                    evidence["digit_entropy"] = entropy
+
+                # ROUND NUMBER (FLOAT SAFE)
+                if np.isclose(val % 10, 0, atol=1e-6):
+                    score += 10
+                    evidence["round_number"] = True
+
+                if score >= self.score_threshold:
+                    mask = numeric == val
+                    placeholder_mask |= mask
+
+                    violations.append({
+                        "type": "SENTINEL_VALUE_PATTERN",
+                        "confidence": round(min(score / 100, 1.0), 2),
+                        "evidence": {
+                            "value": val,
+                            **evidence
+                        }
+                    })
+
+        placeholder_count = int(placeholder_mask.sum())
+        missing_ratio = round(
+            (actual_nan_count + placeholder_count) / total_rows, 4
+        )
+
         status = "valid"
-        if missing_ratio > 0.8: status = "broken"
-        elif missing_ratio > 0.0: status = "weak"
+        if missing_ratio > 0.8:
+            status = "broken"
+        elif missing_ratio > 0:
+            status = "weak"
 
         return {
-            "missingness": {
-                "status": status,
-                "value": missing_ratio,
-                "evidence": {
-                    "missing_ratio": missing_ratio,
-                    "actual_nan_count": int(actual_nan_count),
-                    # "detected_placeholders": detected_values,
-                    # "placeholder_row_count": int(placeholder_rows)
-                }
-            }
+            "missing_component": {
+                "actual_nan": actual_nan_count,
+                "placeholder": placeholder_count
+            },
+            "violations": violations
         }
 
 if __name__ == "__main__":
-    
-    # --- Example Usage for your Layer 2 system ---
-    diagnostic = NumericPlaceholderDiagnostic()
-    findings = diagnostic.diagnose_column(df['age'], target=df['income'], target_type='regression')
+    NumericPlaceholderDiagnostic()
