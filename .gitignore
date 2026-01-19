@@ -122,3 +122,7 @@ engine/Layer_2/Signals/Numeric/Phase_A/markdown_files
 # ========================
 generate_snapshots.py
 tests/
+
+# Layer 2 testing files
+engine/Layer_2/**/test_*.py
+engine/Layer_2/**/temp/
