@@ -227,23 +227,26 @@ def get_target_profile(df:pd.DataFrame, target:pd.Series):
         return concentration
      
 
-def run_signals_extraction(df: pd.DataFrame, target:pd.Series):
+def run_signals_extraction(df: pd.DataFrame, target: pd.Series):
     """
     The Orchestrator calls this function. 
-    It passes the DataFrame, and this function distributes it to the helpers.
+    It passes the DataFrame (features only) and target Series.
+    This function distributes data to the helper functions.
+    
+    Args:
+        df: DataFrame containing features (target should be removed by caller)
+        target: Series containing the target variable
+    
+    Returns:
+        Dictionary with extracted signals
     """
-    # Define a default target (pragmatic approach: use the last column)
-    target = target
-    features = df.drop(['SalePrice'], axis=1)  
-    #! idealy this should be target but the generate snapshot code breaks in the process
-
     final_result = {}
     final_result['Metadata'] = get_metadata(df)
-    final_result['Health Check'] = get_health_signals(features, target)
-    final_result['Complexity profile'] = get_complexity_profile(features)
+    final_result['Health Check'] = get_health_signals(df, target)
+    final_result['Complexity profile'] = get_complexity_profile(df)
     
     # Logic for target profile depends on data type
-    final_result['Target Profile'] = get_target_profile(features, target)
+    final_result['Target Profile'] = get_target_profile(df, target)
     
     return final_result
 

@@ -86,10 +86,37 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
         "status": "broken" if critical_count > 0 else "valid",
         "evidence": {"critical_columns_found": critical_count}
     }
+    
+    # Check 3: Semantic Missing Values (Hidden Missing)
+    # List of common placeholders
+    semantic_placeholders = ["?", "NA", "na", "null", "NULL", "None", "none", "", " "]
+    
+    # Check object columns only for efficiency
+    obj_cols = df.select_dtypes(include=['object', 'category'])
+    semantic_missing_found = False
+    semantic_evidence = []
+    
+    if not obj_cols.empty:
+        # Check if any value in the entire object dataframe matches the placeholders
+        # using isin matches exact strings
+        mask = obj_cols.isin(semantic_placeholders)
+        total_semantic_missing = mask.sum().sum()
+        
+        if total_semantic_missing > 0:
+            semantic_missing_found = True
+            semantic_evidence = f"Found {total_semantic_missing} hidden missing values"
+
+    assumptions["No hidden missing values"] = {
+        "status": "broken" if semantic_missing_found else "valid",
+        "evidence": {"semantic_missing_detected": semantic_missing_found, "details": semantic_evidence if semantic_missing_found else "None"}
+    }
 
     constraints = []
     if critical_count > 0:
         constraints.append(f"Row-wise deletion unsafe; high missingness in: {critical_cols}")
+        
+    if semantic_missing_found:
+        constraints.append(f"Hidden missing values detected (e.g. '?', 'NA'). Preprocessing required to handle them.")
 
     return assumptions, constraints
    

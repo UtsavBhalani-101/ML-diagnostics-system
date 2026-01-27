@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Internal Imports
-from file_support_check import validate_and_load  # Moved to Backend folder
+from Backend.file_support_check import validate_and_load
 from engine.main_engine import main_engine
 
 app = FastAPI()
