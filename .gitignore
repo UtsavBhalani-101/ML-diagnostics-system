@@ -53,6 +53,7 @@ env/
 # Uploads & Data Files
 # ========================
 uploads/
+results/
 *.csv
 *.xlsx
 *.xls

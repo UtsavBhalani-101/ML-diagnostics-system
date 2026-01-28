@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Internal Imports
 from Backend.file_support_check import validate_and_load
-from engine.main_engine import main_engine
+from engine.main_engine import start_engine
 
 app = FastAPI()
 

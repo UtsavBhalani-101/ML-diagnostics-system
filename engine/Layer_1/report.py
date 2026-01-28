@@ -58,13 +58,13 @@ def print_layer1_report(result: dict) -> None:
     print("="*60)
     
     # Count statuses
-    valid_count = sum(1 for a in assumptions.values() if a.get("status") == "valid")
-    weak_count = sum(1 for a in assumptions.values() if a.get("status") == "weak")
-    broken_count = sum(1 for a in assumptions.values() if a.get("status") == "broken")
+    safe_count = sum(1 for a in assumptions.values() if a.get("status") == "SAFE")
+    warning_count = sum(1 for a in assumptions.values() if a.get("status") == "WARNING")
+    danger_count = sum(1 for a in assumptions.values() if a.get("status") == "DANGER")
     total_count = len(assumptions)
     
     # Status symbols (ASCII safe)
-    status_symbols = {"valid": "[OK]", "weak": "[!]", "broken": "[X]"}
+    status_symbols = {"SAFE": "[OK]", "WARNING": "[!]", "DANGER": "[X]"}
     
     for name, details in assumptions.items():
         status = details.get("status", "unknown")
@@ -103,18 +103,19 @@ def print_layer1_report(result: dict) -> None:
     print("="*60)
     
     # Calculate overall health
-    if broken_count > 2:
+        
+    if danger_count > 1:
         health_status = "CRITICAL"
         health_symbol = "[!!!]"
-    elif broken_count > 0 or weak_count > 2:
+    elif danger_count == 0 and warning_count > 1:
         health_status = "WARNING"
         health_symbol = "[!]"
-    else:
+    elif danger_count == 0 and warning_count == 0:
         health_status = "HEALTHY"
         health_symbol = "[OK]"
     
     print(f"\n  Overall Health: {health_symbol} {health_status}")
-    print(f"  Assumptions:    {valid_count} valid, {weak_count} weak, {broken_count} broken")
+    print(f"  Assumptions:    {safe_count} SAFE, {warning_count} WARNING, {danger_count} DANGER")
     print(f"  Constraints:    {len(constraints)} identified")
     
     print("\n" + "="*60 + "\n")
@@ -144,8 +145,8 @@ if __name__ == "__main__":
             "feature_mix": {"mix_type": "Balanced Mix", "num_ratio": 0.5, "cat_ratio": 0.5}
         },
         "assumptions": {
-            "Data is mostly complete": {"status": "valid", "evidence": {"missing_ratio": 0.02}},
-            "No degenerate features": {"status": "broken", "evidence": {"max_constant_ratio": 0.99}}
+            "Data is mostly complete": {"status": "SAFE", "evidence": {"missing_ratio": 0.02}},
+            "No degenerate features": {"status": "DANGER", "evidence": {"max_constant_ratio": 0.99}}
         },
         "constraints": ["Row-wise deletion unsafe; high missingness in: ['col1', 'col2']"]
     }

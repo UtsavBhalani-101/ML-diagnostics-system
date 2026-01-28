@@ -76,14 +76,21 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
     assumptions = {}
     
     # Check 1: General volume
+    if global_missing < 0.05:
+        status_vol = "SAFE"
+    elif global_missing < 0.15:
+        status_vol = "WARNING"
+    else:
+        status_vol = "DANGER"
+
     assumptions["Data is mostly complete"] = {
-        "status": "valid" if global_missing < 0.10 else "weak",
+        "status": status_vol,
         "evidence": {"missing_ratio": round(global_missing, 4)}
     }
 
     # Check 2: Structural holes
     assumptions["Missingness is not structural"] = {
-        "status": "broken" if critical_count > 0 else "valid",
+        "status": "DANGER" if critical_count > 0 else "SAFE",
         "evidence": {"critical_columns_found": critical_count}
     }
     
@@ -107,7 +114,7 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
             semantic_evidence = f"Found {total_semantic_missing} hidden missing values"
 
     assumptions["No hidden missing values"] = {
-        "status": "broken" if semantic_missing_found else "valid",
+        "status": "DANGER" if semantic_missing_found else "SAFE",
         "evidence": {"semantic_missing_detected": semantic_missing_found, "details": semantic_evidence if semantic_missing_found else "None"}
     }
 
@@ -126,12 +133,12 @@ def analyze_duplicates(signal_output:dict):
     
     assumptions = {}
     
-    if duplicates_ratio < 0.01:
-        status = "valid"
-    elif duplicates_ratio < 0.05:
-        status = "weak"
+    if duplicates_ratio < 0.005:
+        status = "SAFE"
+    elif duplicates_ratio < 0.02:
+        status = "WARNING"
     else:
-        status = "broken"
+        status = "DANGER"
     
     assumptions['Duplicate rows are negligible'] = {
         "status": status,
@@ -139,9 +146,9 @@ def analyze_duplicates(signal_output:dict):
     }
     
     constraints = []
-    if status == "weak":
+    if status == "WARNING":
         constraints.append("Minor row-level bias detected; consider deduplication.")
-    elif status == "broken":
+    elif status == "DANGER":
         constraints.append("CRITICAL: Significant row-level bias. Statistics are unreliable.")
         
 
@@ -155,12 +162,13 @@ def analyze_constant_features(signal_output: dict):
     assumptions = {}
 
     # A4: Global feature information density
-    if mean_constant <= 0.65:
-        status_global = "valid"
-    elif mean_constant <= 0.85:
-        status_global = "weak"
+    # A4: Global feature information density
+    if mean_constant <= 0.50:
+        status_global = "SAFE"
+    elif mean_constant <= 0.80:
+        status_global = "WARNING"
     else:
-        status_global = "broken"
+        status_global = "DANGER"
 
     assumptions["Most features carry information"] = {
         "status": status_global,
@@ -170,12 +178,12 @@ def analyze_constant_features(signal_output: dict):
     }
 
     # A4b: Presence of degenerate features
-    if max_constant < 0.95:
-        status_local = "valid"
-    elif max_constant < 0.99:
-        status_local = "weak"
+    if max_constant < 0.90:
+        status_local = "SAFE"
+    elif max_constant < 0.95:
+        status_local = "WARNING"
     else:
-        status_local = "broken"
+        status_local = "DANGER"
 
     assumptions["No degenerate features exists"] = {
         "status": status_local,
@@ -186,12 +194,12 @@ def analyze_constant_features(signal_output: dict):
 
     constraints = []
 
-    if status_global in ["weak", "broken"]:
+    if status_global in ["WARNING", "DANGER"]:
         constraints.append(
             "Global feature signal density is low; aggregate statistics may be diluted"
         )
 
-    if status_local in ["weak", "broken"]:
+    if status_local in ["WARNING", "DANGER"]:
         constraints.append(
             "Some features may be non-informative and distort feature importance estimates"
         )
@@ -205,12 +213,12 @@ def analyze_cardinality(signal_output: dict):
     assumptions = {}
     
 
-    if cardinality_ratio <= 0.2:
-        status = "valid"
-    elif cardinality_ratio <= 0.8:
-        status = "weak"
+    if cardinality_ratio <= 0.10:
+        status = "SAFE"
+    elif cardinality_ratio <= 0.50:
+        status = "WARNING"
     else:
-        status = "broken"
+        status = "DANGER"
         
     
     assumptions["Cardinality is manageable"] = {
@@ -219,7 +227,7 @@ def analyze_cardinality(signal_output: dict):
     }
     
     constraints = []
-    if status in ["weak", "broken"]:
+    if status in ["WARNING", "DANGER"]:
         constraints.append("Naive categorical encoding may cause dimensions explosion")
     
     return assumptions, constraints
@@ -228,12 +236,12 @@ def analyze_cardinality(signal_output: dict):
 def analyze_multicollinearity(signal_output: dict):
     ratio = signal_output["Complexity profile"]["Multicollinearity"]
     
-    if ratio <= 0.05:
-        status = "valid"
-    elif ratio <= 0.15:
-        status = "weak"
+    if ratio <= 0.02:
+        status = "SAFE"
+    elif ratio <= 0.10:
+        status = "WARNING"
     else:
-        status = "broken"
+        status = "DANGER"
     
     assumptions = {}
     assumptions["Strong multicollinearity is limited"] = {
@@ -242,7 +250,7 @@ def analyze_multicollinearity(signal_output: dict):
     }
     
     constraints = []
-    if status in ["weak", "broken"]:
+    if status in ["WARNING", "DANGER"]:
         constraints.append("Linear feature weights are unreliable")
         
     return assumptions, constraints
@@ -251,12 +259,12 @@ def analyze_multicollinearity(signal_output: dict):
 def analyze_outliers(signal_output: dict):
     ratio = signal_output["Complexity profile"]["Outliers"]
     
-    if ratio <= 0.1:
-        status = "valid"
-    elif ratio <= 0.25:
-        status = "weak"
+    if ratio <= 0.05:
+        status = "SAFE"
+    elif ratio <= 0.15:
+        status = "WARNING"
     else:
-        status = "broken"
+        status = "DANGER"
     
     assumptions = {}
     assumptions["Extreme outliers are rare"] = {
@@ -265,7 +273,7 @@ def analyze_outliers(signal_output: dict):
     }
     
     constraints = []
-    if status in ["weak", "broken"]:
+    if status in ["WARNING", "DANGER"]:
         constraints.append("Mean and scale-based statistics are unreliable")
         
     return assumptions, constraints
@@ -275,9 +283,9 @@ def analyze_mixed(signal_output: dict):
     ratio = signal_output["Complexity profile"]["Mixed"]
     
     if ratio == 0.0:
-        status = "valid"
+        status = "SAFE"
     else:
-        status = "broken"
+        status = "DANGER"
     
     assumptions = {}
     assumptions["Mixed columns are rare"] = {
@@ -285,7 +293,7 @@ def analyze_mixed(signal_output: dict):
         "evidence" : {"mixed_ratio" : ratio}
     }
     constraints = []
-    if status == "broken":
+    if status == "DANGER":
         constraints.append("Column-level type assumptions are invalid")
         
     return assumptions, constraints
