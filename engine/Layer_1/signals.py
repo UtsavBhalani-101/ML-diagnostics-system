@@ -70,7 +70,7 @@ def get_metadata(df):
 #^ constant ratio  
 def get_global_constant_ratio(df: pd.DataFrame):
     if df.empty:
-        return {"max_ratio": 0.0, "mean_ratio": 0.0}
+        return {"max_ratio": 0.0}
 
     all_ratios = []
 
@@ -83,14 +83,12 @@ def get_global_constant_ratio(df: pd.DataFrame):
         all_ratios.append(ratio)
 
     if not all_ratios:
-        return {"max_ratio": 0.0, "mean_ratio": 0.0}
+        return {"max_ratio": 0.0}
     
     max_ratio = max(all_ratios)
-    mean_ratio = sum(all_ratios) / len(all_ratios)
 
     return {
         "max_ratio": round(max_ratio, 4),
-        "mean_ratio": round(mean_ratio, 4)
     }
     
     
@@ -99,14 +97,14 @@ def get_health_signals(df: pd.DataFrame, target: pd.Series):
     rows, cols = df.shape
 
     missing_ratio = df.isnull().sum().sum() / df.size if df.size else 0.0
-    constant_ratio = get_global_constant_ratio(df)  # Now returns {"max_ratio": ..., "mean_ratio": ...}
+    constant_ratio = get_global_constant_ratio(df)  # Now returns {"max_ratio": ...}
     duplicated_ratio = df.duplicated().mean() if rows else 0.0
 
     target_dist = target.value_counts(normalize=True)
 
     return {
         "missing_ratio": round(missing_ratio, 4),
-        "constant_ratio": constant_ratio,  # Nested dictionary with max_ratio and mean_ratio
+        "constant_ratio": constant_ratio,  # Nested dictionary with max_ratio
         "duplicated_ratio": round(duplicated_ratio, 4),
     }
 

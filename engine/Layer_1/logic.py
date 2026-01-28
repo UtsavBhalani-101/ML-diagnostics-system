@@ -156,26 +156,9 @@ def analyze_duplicates(signal_output:dict):
 
 #^ checking constant 
 def analyze_constant_features(signal_output: dict):
-    mean_constant = signal_output["Health Check"]["constant_ratio"]["mean_ratio"]
     max_constant = signal_output["Health Check"]["constant_ratio"]["max_ratio"]
 
     assumptions = {}
-
-    # A4: Global feature information density
-    # A4: Global feature information density
-    if mean_constant <= 0.50:
-        status_global = "SAFE"
-    elif mean_constant <= 0.80:
-        status_global = "WARNING"
-    else:
-        status_global = "DANGER"
-
-    assumptions["Most features carry information"] = {
-        "status": status_global,
-        "evidence": {
-            "mean_constant_ratio": mean_constant
-        }
-    }
 
     # A4b: Presence of degenerate features
     if max_constant < 0.90:
@@ -194,10 +177,7 @@ def analyze_constant_features(signal_output: dict):
 
     constraints = []
 
-    if status_global in ["WARNING", "DANGER"]:
-        constraints.append(
-            "Global feature signal density is low; aggregate statistics may be diluted"
-        )
+
 
     if status_local in ["WARNING", "DANGER"]:
         constraints.append(

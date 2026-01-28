@@ -28,7 +28,11 @@ def print_layer1_report(result: dict) -> None:
     dims = facts.get("dimensions", {})
     print("\n[DIMENSIONS]")
     print("-" * 40)
-    print(f"  Rows:        {dims.get('rows', 'N/A'):,}")
+    
+    rows = dims.get('rows', 'N/A')
+    rows_str = f"{rows:,}" if isinstance(rows, (int, float)) else str(rows)
+    print(f"  Rows:        {rows_str}")
+    
     print(f"  Columns:     {dims.get('columns', 'N/A')}")
     print(f"  Shape:       {dims.get('shape', 'N/A')}")
     print(f"  Scale:       {dims.get('scale_class', 'N/A').upper()}")
@@ -103,14 +107,13 @@ def print_layer1_report(result: dict) -> None:
     print("="*60)
     
     # Calculate overall health
-        
-    if danger_count > 1:
+    if danger_count > 0:
         health_status = "CRITICAL"
         health_symbol = "[!!!]"
-    elif danger_count == 0 and warning_count > 1:
+    elif warning_count > 0:
         health_status = "WARNING"
         health_symbol = "[!]"
-    elif danger_count == 0 and warning_count == 0:
+    else:
         health_status = "HEALTHY"
         health_symbol = "[OK]"
     

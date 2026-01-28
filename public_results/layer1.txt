@@ -1,0 +1,114 @@
+{
+    "data_loaded": true,
+    "shape": [
+        32561,
+        15
+    ],
+    "signals": {
+        "Metadata": {
+            "Rows": 32561,
+            "Columns": 14,
+            "Numerical Columns Ratio": 0.42857142857142855,
+            "Valid Categorical Columns Ratio": 0.5714285714285714,
+            "Feature to Row Ratio": 0.00042996222474739717,
+            "Memory (MB)": 15.9776
+        },
+        "Health Check": {
+            "missing_ratio": 0.0,
+            "constant_ratio": {
+                "max_ratio": 0.9533
+            },
+            "duplicated_ratio": 0.0008
+        },
+        "Complexity profile": {
+            "Multicollinearity": 0.0,
+            "Cardinality": 0.0004,
+            "Outliers": 0.0797,
+            "Mixed": 0.0
+        },
+        "Target Profile": 0.7592
+    },
+    "logic": {
+        "facts": {
+            "dimensions": {
+                "rows": 32561,
+                "columns": 14,
+                "shape": "32561 x 14",
+                "scale_class": "medium"
+            },
+            "memory": {
+                "memory_mb": 15.978,
+                "memory_class": "moderate"
+            },
+            "feature_mix": {
+                "mix_type": "Categorical Dominant (High Complexity)",
+                "num_ratio": 0.429,
+                "cat_ratio": 0.571
+            }
+        },
+        "assumptions": {
+            "Data is mostly complete": {
+                "status": "SAFE",
+                "evidence": {
+                    "missing_ratio": 0.0
+                }
+            },
+            "Missingness is not structural": {
+                "status": "SAFE",
+                "evidence": {
+                    "critical_columns_found": 0
+                }
+            },
+            "No hidden missing values": {
+                "status": "DANGER",
+                "evidence": {
+                    "semantic_missing_detected": true,
+                    "details": "Found 4262 hidden missing values"
+                }
+            },
+            "Duplicate rows are negligible": {
+                "status": "SAFE",
+                "evidence": {
+                    "duplicated_ratio": 0.0008
+                }
+            },
+            "No degenerate features exists": {
+                "status": "DANGER",
+                "evidence": {
+                    "max_constant_ratio": 0.9533
+                }
+            },
+            "Cardinality is manageable": {
+                "status": "SAFE",
+                "evidence": {
+                    "cardinality_ratio": 0.0004
+                }
+            },
+            "Strong multicollinearity is limited": {
+                "status": "SAFE",
+                "evidence": {
+                    "multicollinearity_density": 0.0
+                }
+            },
+            "Extreme outliers are rare": {
+                "status": "WARNING",
+                "evidence": {
+                    "outlier_ratio": 0.0797
+                }
+            },
+            "Mixed columns are rare": {
+                "status": "SAFE",
+                "evidence": {
+                    "mixed_ratio": 0.0
+                }
+            }
+        },
+        "constraints": [
+            "Hidden missing values detected (e.g. '?', 'NA'). Preprocessing required to handle them.",
+            "Some features may be non-informative and distort feature importance estimates",
+            "Mean and scale-based statistics are unreliable"
+        ]
+    },
+    "report": "\n============================================================\n           DATASET TRIAGE (LAYER 1)\n============================================================\n\n[DIMENSIONS]\n----------------------------------------\n  Rows:        32,561\n  Columns:     14\n  Shape:       32561 x 14\n  Scale:       MEDIUM\n\n[MEMORY]\n----------------------------------------\n  Usage:       15.978 MB\n  Class:       MODERATE\n\n[FEATURE MIX]\n----------------------------------------\n  Type:        Categorical Dominant (High Complexity)\n  Numeric:     42.9%\n  Categorical: 57.1%\n\n============================================================\n           HEALTH ASSUMPTIONS\n============================================================\n\n[OK] Data is mostly complete\n   Status: SAFE\n   missing_ratio: 0.0000\n\n[OK] Missingness is not structural\n   Status: SAFE\n   critical_columns_found: 0\n\n[X] No hidden missing values\n   Status: DANGER\n   semantic_missing_detected: True\n   details: Found 4262 hidden missing values\n\n[OK] Duplicate rows are negligible\n   Status: SAFE\n   duplicated_ratio: 0.0008\n\n[X] No degenerate features exists\n   Status: DANGER\n   max_constant_ratio: 0.9533\n\n[OK] Cardinality is manageable\n   Status: SAFE\n   cardinality_ratio: 0.0004\n\n[OK] Strong multicollinearity is limited\n   Status: SAFE\n   multicollinearity_density: 0.0000\n\n[!] Extreme outliers are rare\n   Status: WARNING\n   outlier_ratio: 0.0797\n\n[OK] Mixed columns are rare\n   Status: SAFE\n   mixed_ratio: 0.0000\n\n============================================================\n           CONSTRAINTS\n============================================================\n\n  1. [!] Hidden missing values detected (e.g. '?', 'NA'). Preprocessing required to handle them.\n\n  2. [!] Some features may be non-informative and distort feature importance estimates\n\n  3. [!] Mean and scale-based statistics are unreliable\n\n============================================================\n           SUMMARY\n============================================================\n\n  Overall Health: [!!!] CRITICAL\n  Assumptions:    6 SAFE, 1 WARNING, 2 DANGER\n  Constraints:    3 identified\n\n============================================================\n\n",
+    "status": "success"
+}
