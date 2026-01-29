@@ -412,28 +412,24 @@ async def set_target_column(request: TargetColumnRequest) -> TargetColumnRespons
     response_model=Layer1OutputResponse,
     responses={
         200: {"model": Layer1OutputResponse, "description": "Analysis completed successfully"},
-        400: {"model": ErrorResponse, "description": "Invalid request - no file or target column set"}
+        400: {"model": ErrorResponse, "description": "Invalid request - no file uploaded"}
     },
     summary="Run Layer 1 analysis",
-    description="Runs the Layer 1 analysis pipeline with the specified target column. Requires file upload and target column to be set first."
+    description="Runs the Layer 1 analysis pipeline on the entire uploaded dataset. No target column needed for Layer 1."
 )
 async def run_analysis() -> Layer1OutputResponse:
     """
     Runs the Layer 1 analysis pipeline:
-    1. Checks if file is uploaded and target column is set
-    2. Runs the pipeline with the target column
+    1. Checks if file is uploaded
+    2. Runs the pipeline on ENTIRE DataFrame (all columns)
     3. Returns the analysis results
+    
+    Note: Layer 1 always analyzes all columns. Target column is NOT used in Layer 1.
     """
     if not _valid_file_uploaded["status"] or not _valid_file_uploaded["filename"]:
         raise HTTPException(
             status_code=400,
             detail="No valid file has been uploaded. Please upload a file first using /validate-file."
-        )
-    
-    if not _valid_file_uploaded["target_column"]:
-        raise HTTPException(
-            status_code=400,
-            detail="No target column has been set. Please set a target column using /set-target-column first."
         )
     
     file_path = os.path.join(UPLOAD_DIR, _valid_file_uploaded["filename"])
@@ -448,8 +444,8 @@ async def run_analysis() -> Layer1OutputResponse:
         )
     
     try:
-        # Run pipeline with specified target column
-        pipeline_result = run_pipeline(file_path, target_column=_valid_file_uploaded["target_column"])
+        # Run pipeline on entire DataFrame (Layer 1 does NOT use target column)
+        pipeline_result = run_pipeline(file_path)
         
         # Convert tuple shape to list for JSON serialization
         if 'shape' in pipeline_result and isinstance(pipeline_result['shape'], tuple):

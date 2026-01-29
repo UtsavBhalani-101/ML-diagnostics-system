@@ -93,14 +93,12 @@ def get_global_constant_ratio(df: pd.DataFrame):
     
     
 #^ Health Signals
-def get_health_signals(df: pd.DataFrame, target: pd.Series):
+def get_health_signals(df: pd.DataFrame):
     rows, cols = df.shape
 
     missing_ratio = df.isnull().sum().sum() / df.size if df.size else 0.0
     constant_ratio = get_global_constant_ratio(df)  # Now returns {"max_ratio": ...}
     duplicated_ratio = df.duplicated().mean() if rows else 0.0
-
-    target_dist = target.value_counts(normalize=True)
 
     return {
         "missing_ratio": round(missing_ratio, 4),
@@ -208,43 +206,22 @@ def get_complexity_profile(df: pd.DataFrame):
         "Mixed": mixed
     }
     
-def get_target_concentration_ratio(y: pd.Series):
-    y = y.dropna()
-    if y.empty:
-        return 0.0
-
-    dist = y.value_counts(normalize=True)
-    return round(dist.max(), 4)
-
-def get_target_profile(df:pd.DataFrame, target:pd.Series):
-    if target.dtype == 'category':
-        imbalance_ratio = target_dist.min() if len(target_dist) > 1 else 0.0
-        return imbalance_ratio
-    else:
-        concentration = get_target_concentration_ratio(target)
-        return concentration
-     
-
-def run_signals_extraction(df: pd.DataFrame, target: pd.Series):
+def run_signals_extraction(df: pd.DataFrame):
     """
     The Orchestrator calls this function. 
-    It passes the DataFrame (features only) and target Series.
+    It passes the DataFrame (features only).
     This function distributes data to the helper functions.
     
     Args:
-        df: DataFrame containing features (target should be removed by caller)
-        target: Series containing the target variable
+        df: DataFrame containing features
     
     Returns:
         Dictionary with extracted signals
     """
     final_result = {}
     final_result['Metadata'] = get_metadata(df)
-    final_result['Health Check'] = get_health_signals(df, target)
+    final_result['Health Check'] = get_health_signals(df)
     final_result['Complexity profile'] = get_complexity_profile(df)
-    
-    # Logic for target profile depends on data type
-    final_result['Target Profile'] = get_target_profile(df, target)
     
     return final_result
 

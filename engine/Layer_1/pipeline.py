@@ -26,14 +26,15 @@ def convert_numpy_types(obj):
         return obj
 
 
-def run_pipeline(file_path, target_column=None):
+def run_pipeline(file_path):
     """
     Run the full Layer 1 diagnostic pipeline.
     
+    Layer 1 always analyzes the ENTIRE DataFrame (all columns).
+    Target column specification has no effect on Layer 1 output.
+    
     Args:
         file_path: Path to the dataset file
-        target_column: Name of the target column (optional). 
-                      If not provided, the last column is used as the target.
     
     Returns:
         Dictionary with pipeline results
@@ -48,32 +49,17 @@ def run_pipeline(file_path, target_column=None):
         results['data_loaded'] = True
         results['shape'] = df.shape
         
-        # 2. Prepare features and target
-        if target_column and target_column in df.columns:
-            # Use specified target column
-            target = df[target_column]
-            features = df.drop(columns=[target_column])
-            print(f"Using specified target column: '{target_column}'")
-        elif target_column and target_column not in df.columns:
-            # Specified column not found, fall back to last column
-            print(f"Warning: Target column '{target_column}' not found. Using last column as target.")
-            target = df.iloc[:, -1]
-            features = df.iloc[:, :-1]
-        else:
-            # No target specified, use last column as default
-            last_col = df.columns[-1]
-            target = df[last_col]
-            features = df.drop(columns=[last_col])
-            print(f"No target specified. Using last column as target: '{last_col}'")
+        # 2. Layer 1 analyzes ALL columns (no target exclusion)
+        print(f"Analyzing all {df.shape[1]} columns...")
         
         # 3. Execute Signal Extraction
         print("Executing Signal Extraction...")
-        signal_output = signals.run_signals_extraction(features, target)
+        signal_output = signals.run_signals_extraction(df)
         results['signals'] = signal_output
         
         # 4. Execute Logic Analysis
         print("Executing Layer 1 Logic...")
-        diagnostics = logic.run_logic_extraction(features, signal_output)
+        diagnostics = logic.run_logic_extraction(df, signal_output)
         results['logic'] = diagnostics
         
         # 5. Generate Report

@@ -121,18 +121,15 @@ def print_layer1_report(result: dict) -> None:
     print("           SUMMARY")
     print("="*60)
     
-    # Calculate overall health
+    # Calculate overall health - highest risk status detected
     if danger_count > 0:
-        health_status = "CRITICAL"
-        health_symbol = "[!!!]"
+        overall_health = "DANGER"
     elif warning_count > 0:
-        health_status = "WARNING"
-        health_symbol = "[!]"
+        overall_health = "WARNING"
     else:
-        health_status = "HEALTHY"
-        health_symbol = "[OK]"
+        overall_health = "SAFE"
     
-    print(f"\n  Overall Health: {health_symbol} {health_status}")
+    print(f"\n  Overall Health: {overall_health}")
     print(f"  Tests:          {safe_count} SAFE, {warning_count} WARNING, {danger_count} DANGER")
     print(f"  Constraints:    {len(constraints)} identified")
     

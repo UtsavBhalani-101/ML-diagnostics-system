@@ -34,7 +34,7 @@ TEST_DATA_PATH = r"D:\ML diagnose v1\uploads\adult.csv"
 TESTS_DIR = "tests"
 LAYER1_TESTS_DIR = os.path.join(TESTS_DIR, "layer1")
 
-# Target column (adjust based on your dataset)
+# Target column (used only to exclude from feature analysis)
 TARGET_COLUMN = "income"
 
 
@@ -86,7 +86,7 @@ def load_test_data():
 # Individual Module Tests
 # ============================================================
 
-def test_signals_module(df: pd.DataFrame, target: pd.Series) -> dict:
+def test_signals_module(df: pd.DataFrame) -> dict:
     """
     Test all functions in signals.py individually.
     """
@@ -235,7 +235,7 @@ def test_signals_module(df: pd.DataFrame, target: pd.Series) -> dict:
     # Test: Full signal extraction
     print("\n[FULL] Testing run_signals_extraction...")
     try:
-        full_signals = signals.run_signals_extraction(df, target)
+        full_signals = signals.run_signals_extraction(df)
         results["tests"]["run_signals_extraction"] = {
             "status": "PASS",
             "output": full_signals
@@ -514,11 +514,9 @@ def run_all_tests():
     # Setup
     setup_test_dirs()
     
-    # Load test data
+    # Load test data - Layer 1 uses ENTIRE DataFrame (all columns)
     try:
         df = load_test_data()
-        target = df[TARGET_COLUMN]
-        features = df.drop(columns=[TARGET_COLUMN])
     except Exception as e:
         print(f"\n✗ Failed to load test data: {e}")
         return
@@ -529,29 +527,28 @@ def run_all_tests():
         "data_info": {
             "source": TEST_DATA_PATH,
             "rows": len(df),
-            "columns": len(df.columns),
-            "target_column": TARGET_COLUMN
+            "columns": len(df.columns)
         },
         "modules": {}
     }
     
-    # Test 1: Signals Module
-    signals_results = test_signals_module(features, target)
+    # Test 1: Signals Module (uses entire DataFrame)
+    signals_results = test_signals_module(df)
     all_results["modules"]["signals"] = signals_results["summary"]
     
     # Get signal output for subsequent tests
     try:
-        signal_output = signals.run_signals_extraction(features, target)
+        signal_output = signals.run_signals_extraction(df)
     except:
         signal_output = {}
     
-    # Test 2: Logic Module
-    logic_results = test_logic_module(features, signal_output)
+    # Test 2: Logic Module (uses entire DataFrame)
+    logic_results = test_logic_module(df, signal_output)
     all_results["modules"]["logic"] = logic_results["summary"]
     
     # Get diagnostics for report test
     try:
-        diagnostics = logic.run_logic_extraction(features, signal_output)
+        diagnostics = logic.run_logic_extraction(df, signal_output)
     except:
         diagnostics = {}
     
