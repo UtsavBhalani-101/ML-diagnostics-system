@@ -1,11 +1,29 @@
 import pandas as pd
+import numpy as np
 import traceback
 from engine.Layer_1 import signals
 from engine.Layer_1 import logic
 from engine.Layer_1 import report
 
-# Default target column - adjust based on your dataset
-DEFAULT_TARGET = "SalePrice"
+
+def convert_numpy_types(obj):
+    """
+    Recursively convert numpy types to Python native types for JSON serialization.
+    """
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    else:
+        return obj
 
 
 def run_pipeline(file_path, target_column=None):
@@ -14,14 +32,14 @@ def run_pipeline(file_path, target_column=None):
     
     Args:
         file_path: Path to the dataset file
-        target_column: Name of the target column (optional, defaults to DEFAULT_TARGET)
+        target_column: Name of the target column (optional). 
+                      If not provided, the last column is used as the target.
     
     Returns:
         Dictionary with pipeline results
     """
     print("Starting Pipeline...")
     results = {}
-    target_col = target_column or DEFAULT_TARGET
     
     try:
         # 1. Load the data
@@ -31,13 +49,22 @@ def run_pipeline(file_path, target_column=None):
         results['shape'] = df.shape
         
         # 2. Prepare features and target
-        if target_col in df.columns:
-            target = df[target_col]
-            features = df.drop(columns=[target_col])
-        else:
-            print(f"Warning: Target column '{target_col}' not found. Using full DataFrame.")
-            target = df.iloc[:, -1]  # Use last column as target
+        if target_column and target_column in df.columns:
+            # Use specified target column
+            target = df[target_column]
+            features = df.drop(columns=[target_column])
+            print(f"Using specified target column: '{target_column}'")
+        elif target_column and target_column not in df.columns:
+            # Specified column not found, fall back to last column
+            print(f"Warning: Target column '{target_column}' not found. Using last column as target.")
+            target = df.iloc[:, -1]
             features = df.iloc[:, :-1]
+        else:
+            # No target specified, use last column as default
+            last_col = df.columns[-1]
+            target = df[last_col]
+            features = df.drop(columns=[last_col])
+            print(f"No target specified. Using last column as target: '{last_col}'")
         
         # 3. Execute Signal Extraction
         print("Executing Signal Extraction...")
@@ -59,6 +86,10 @@ def run_pipeline(file_path, target_column=None):
         
         print("Pipeline Complete.")
         results['status'] = 'success'
+        
+        # Convert numpy types to native Python types for JSON serialization
+        results = convert_numpy_types(results)
+        
         return results
         
     except Exception as e:

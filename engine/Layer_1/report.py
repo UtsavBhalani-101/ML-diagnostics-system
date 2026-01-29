@@ -12,7 +12,7 @@ def print_layer1_report(result: dict) -> None:
     Args:
         result: Dictionary from logic.run_logic_extraction() with structure:
             - facts: {dimensions, memory, feature_mix}
-            - assumptions: {assumption_name: {status, evidence}}
+            - tests: {test_name: {check_id, metric, status, risk_code, scope, verdict}}
             - constraints: [list of constraint strings]
     """
     print("\n" + "="*60)
@@ -53,36 +53,51 @@ def print_layer1_report(result: dict) -> None:
     print(f"  Categorical: {mix.get('cat_ratio', 0)*100:.1f}%")
     
     # ============================================================
-    # Section 2: Assumptions & Health Status
+    # Section 2: Diagnostic Tests
     # ============================================================
-    assumptions = result.get("assumptions", {})
+    tests = result.get("tests", {})
     
     print("\n" + "="*60)
-    print("           HEALTH ASSUMPTIONS")
+    print("           DIAGNOSTIC TESTS")
     print("="*60)
     
     # Count statuses
-    safe_count = sum(1 for a in assumptions.values() if a.get("status") == "SAFE")
-    warning_count = sum(1 for a in assumptions.values() if a.get("status") == "WARNING")
-    danger_count = sum(1 for a in assumptions.values() if a.get("status") == "DANGER")
-    total_count = len(assumptions)
+    safe_count = sum(1 for t in tests.values() if t.get("status") == "SAFE")
+    warning_count = sum(1 for t in tests.values() if t.get("status") == "WARNING")
+    danger_count = sum(1 for t in tests.values() if t.get("status") == "DANGER")
+    total_count = len(tests)
     
     # Status symbols (ASCII safe)
     status_symbols = {"SAFE": "[OK]", "WARNING": "[!]", "DANGER": "[X]"}
     
-    for name, details in assumptions.items():
+    for test_name, details in tests.items():
         status = details.get("status", "unknown")
         symbol = status_symbols.get(status, "[?]")
-        evidence = details.get("evidence", {})
         
-        print(f"\n{symbol} {name}")
-        print(f"   Status: {status.upper()}")
-        if evidence:
-            for key, value in evidence.items():
-                if isinstance(value, float):
-                    print(f"   {key}: {value:.4f}")
-                else:
+        print(f"\n{symbol} {test_name}")
+        print(f"   Check ID:   {details.get('check_id', 'N/A')}")
+        
+        metric = details.get("metric", "N/A")
+        if isinstance(metric, float):
+            print(f"   Metric:     {metric:.4f}")
+        else:
+            print(f"   Metric:     {metric}")
+        
+        print(f"   Status:     {status.upper()}")
+        print(f"   Risk Code:  {details.get('risk_code', 'N/A')}")
+        print(f"   Scope:      {details.get('scope', 'N/A')}")
+        print(f"   Verdict:    {details.get('verdict', 'N/A')}")
+        
+        # Print additional info if present
+        if "info" in details:
+            info = details["info"]
+            if isinstance(info, dict):
+                for key, value in info.items():
                     print(f"   {key}: {value}")
+        
+        # Print column info if present (for column-scoped tests)
+        if "column" in details and details["column"]:
+            print(f"   Columns:    {details['column']}")
     
     # ============================================================
     # Section 3: Constraints
@@ -118,7 +133,7 @@ def print_layer1_report(result: dict) -> None:
         health_symbol = "[OK]"
     
     print(f"\n  Overall Health: {health_symbol} {health_status}")
-    print(f"  Assumptions:    {safe_count} SAFE, {warning_count} WARNING, {danger_count} DANGER")
+    print(f"  Tests:          {safe_count} SAFE, {warning_count} WARNING, {danger_count} DANGER")
     print(f"  Constraints:    {len(constraints)} identified")
     
     print("\n" + "="*60 + "\n")
@@ -140,16 +155,31 @@ def get_report_string(result: dict) -> str:
 
 
 if __name__ == "__main__":
-    # Test with sample data
+    # Test with sample data in new format
     sample_result = {
         "facts": {
             "dimensions": {"rows": 1000, "columns": 50, "shape": "1000 x 50", "scale_class": "medium"},
             "memory": {"memory_mb": 5.5, "memory_class": "light"},
             "feature_mix": {"mix_type": "Balanced Mix", "num_ratio": 0.5, "cat_ratio": 0.5}
         },
-        "assumptions": {
-            "Data is mostly complete": {"status": "SAFE", "evidence": {"missing_ratio": 0.02}},
-            "No degenerate features": {"status": "DANGER", "evidence": {"max_constant_ratio": 0.99}}
+        "tests": {
+            "dataset_missing_ratio": {
+                "check_id": "dataset_missing_ratio",
+                "metric": 0.02,
+                "status": "SAFE",
+                "risk_code": "MISSINGNESS",
+                "scope": "DATASET",
+                "verdict": "Data completeness is acceptable. No imputation required."
+            },
+            "column_max_constant_ratio": {
+                "check_id": "column_max_constant_ratio",
+                "metric": 0.99,
+                "status": "DANGER",
+                "risk_code": "DEGENERACY",
+                "scope": "COLUMN",
+                "column": ["feature_1"],
+                "verdict": "Near-constant features detected. These should be removed before modeling."
+            }
         },
         "constraints": ["Row-wise deletion unsafe; high missingness in: ['col1', 'col2']"]
     }

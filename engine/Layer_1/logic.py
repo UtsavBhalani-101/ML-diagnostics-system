@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from engine.Layer_1.risk_template import add_verdicts_to_tests
 
 
 #^ key facts - dimensions
@@ -73,7 +74,7 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
     critical_cols = col_missing_ratios[col_missing_ratios > critical_threshold].index.tolist()
     critical_count = len(critical_cols)
     
-    assumptions = {}
+    tests = {}
     
     # Check 1: General volume
     if global_missing < 0.05:
@@ -83,15 +84,21 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
     else:
         status_vol = "DANGER"
 
-    assumptions["Data is mostly complete"] = {
+    tests["dataset_missing_ratio"] = {
+        "check_id": "dataset_missing_ratio",
+        "metric": round(global_missing, 4),
         "status": status_vol,
-        "evidence": {"missing_ratio": round(global_missing, 4)}
+        "risk_code": "MISSINGNESS",
+        "scope": "DATASET"
     }
 
     # Check 2: Structural holes
-    assumptions["Missingness is not structural"] = {
+    tests["dataset_structural_missingness"] = {
+        "check_id": "dataset_structural_missingness",
+        "metric": critical_count,
         "status": "DANGER" if critical_count > 0 else "SAFE",
-        "evidence": {"critical_columns_found": critical_count}
+        "risk_code" : "STRUCTURAL_MISSINGNESS",
+        "scope" : "DATASET"
     }
     
     # Check 3: Semantic Missing Values (Hidden Missing)
@@ -101,21 +108,35 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
     # Check object columns only for efficiency
     obj_cols = df.select_dtypes(include=['object', 'category'])
     semantic_missing_found = False
-    semantic_evidence = []
+    total_semantic_missing = 0
+    detected_placeholders = []
     
     if not obj_cols.empty:
-        # Check if any value in the entire object dataframe matches the placeholders
-        # using isin matches exact strings
+        # Check which placeholders are actually present
+        for placeholder in semantic_placeholders:
+            mask = obj_cols.isin([placeholder])
+            count = mask.sum().sum()
+            if count > 0:
+                detected_placeholders.append(placeholder if placeholder.strip() else repr(placeholder))
+        
+        # Get total count
         mask = obj_cols.isin(semantic_placeholders)
         total_semantic_missing = mask.sum().sum()
         
         if total_semantic_missing > 0:
             semantic_missing_found = True
-            semantic_evidence = f"Found {total_semantic_missing} hidden missing values"
 
-    assumptions["No hidden missing values"] = {
+    tests["dataset_hidden_missing_values"] = {
+        "check_id": "dataset_hidden_missing_values",
         "status": "DANGER" if semantic_missing_found else "SAFE",
-        "evidence": {"semantic_missing_detected": semantic_missing_found, "details": semantic_evidence if semantic_missing_found else "None"}
+        "metric": total_semantic_missing,
+        "info": {
+            "semantic_missing_detected": semantic_missing_found, 
+            "details": f"Found {total_semantic_missing} hidden missing values" if semantic_missing_found else "None"
+        },
+        "detected_placeholders": detected_placeholders if semantic_missing_found else [],
+        "risk_code": "HIDDEN_MISSING",
+        "scope": "DATASET"
     }
 
     constraints = []
@@ -125,13 +146,13 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
     if semantic_missing_found:
         constraints.append(f"Hidden missing values detected (e.g. '?', 'NA'). Preprocessing required to handle them.")
 
-    return assumptions, constraints
+    return tests, constraints
    
 #^ checking duplicates  
 def analyze_duplicates(signal_output:dict):
     duplicates_ratio = signal_output['Health Check']['duplicated_ratio']
     
-    assumptions = {}
+    tests = {}
     
     if duplicates_ratio < 0.005:
         status = "SAFE"
@@ -140,9 +161,12 @@ def analyze_duplicates(signal_output:dict):
     else:
         status = "DANGER"
     
-    assumptions['Duplicate rows are negligible'] = {
+    tests["dataset_duplicates_ratio"] = {
+        "check_id": "dataset_duplicates_ratio",
+        "metric" : duplicates_ratio,
         "status": status,
-        "evidence" : {"duplicated_ratio" : duplicates_ratio}
+        "risk_code" : "DUPLICATION",
+        "scope" : "DATASET"
     }
     
     constraints = []
@@ -152,13 +176,26 @@ def analyze_duplicates(signal_output:dict):
         constraints.append("CRITICAL: Significant row-level bias. Statistics are unreliable.")
         
 
-    return assumptions, constraints
+    return tests, constraints
 
 #^ checking constant 
-def analyze_constant_features(signal_output: dict):
+def analyze_constant_features(df: pd.DataFrame, signal_output: dict):
     max_constant = signal_output["Health Check"]["constant_ratio"]["max_ratio"]
 
-    assumptions = {}
+    tests = {}
+    
+    # Find columns with near-constant values (threshold: 0.90)
+    flagged_columns = []
+    warning_threshold = 0.90
+    danger_threshold = 0.95
+    
+    for col in df.columns:
+        s = df[col].dropna()
+        if s.empty:
+            continue
+        ratio = s.value_counts(normalize=True).iloc[0]
+        if ratio >= warning_threshold:
+            flagged_columns.append(col)
 
     # A4b: Presence of degenerate features
     if max_constant < 0.90:
@@ -168,29 +205,29 @@ def analyze_constant_features(signal_output: dict):
     else:
         status_local = "DANGER"
 
-    assumptions["No degenerate features exists"] = {
+    tests["column_max_constant_ratio"] = {
+        "check_id": "column_max_constant_ratio",
+        "metric": max_constant,
         "status": status_local,
-        "evidence": {
-            "max_constant_ratio": max_constant
-        }
+        "risk_code": "DEGENERACY",
+        "scope": "COLUMN",
+        "column": flagged_columns
     }
 
     constraints = []
-
-
 
     if status_local in ["WARNING", "DANGER"]:
         constraints.append(
             "Some features may be non-informative and distort feature importance estimates"
         )
 
-    return assumptions, constraints
+    return tests, constraints
 
 #^ checking cardinality
 def analyze_cardinality(signal_output: dict):
     cardinality_ratio = signal_output["Complexity profile"]["Cardinality"]
     
-    assumptions = {}
+    tests = {}
     
 
     if cardinality_ratio <= 0.10:
@@ -201,16 +238,19 @@ def analyze_cardinality(signal_output: dict):
         status = "DANGER"
         
     
-    assumptions["Cardinality is manageable"] = {
+    tests["dataset_cardinality_ratio"] = {
+        "check_id": "dataset_cardinality_ratio",
+        "metric": cardinality_ratio,
         "status": status,
-        "evidence": {"cardinality_ratio": cardinality_ratio}
+        "risk_code": "CARDINALITY_EXPLOSION",
+        "scope": "DATASET"
     }
     
     constraints = []
     if status in ["WARNING", "DANGER"]:
         constraints.append("Naive categorical encoding may cause dimensions explosion")
     
-    return assumptions, constraints
+    return tests, constraints
 
 #^ checking multicollinearity
 def analyze_multicollinearity(signal_output: dict):
@@ -223,17 +263,20 @@ def analyze_multicollinearity(signal_output: dict):
     else:
         status = "DANGER"
     
-    assumptions = {}
-    assumptions["Strong multicollinearity is limited"] = {
+    tests = {}
+    tests["dataset_multicollinearity_density"] = {
+        "check_id": "dataset_multicollinearity_density",
+        "metric": ratio, 
         "status": status,
-        "evidence": {"multicollinearity_density": ratio} 
+        "risk_code": "MULTICOLLINEARITY",
+        "scope": "DATASET"
     }
     
     constraints = []
     if status in ["WARNING", "DANGER"]:
         constraints.append("Linear feature weights are unreliable")
         
-    return assumptions, constraints
+    return tests, constraints
 
 #^ detecting outliers
 def analyze_outliers(signal_output: dict):
@@ -246,17 +289,20 @@ def analyze_outliers(signal_output: dict):
     else:
         status = "DANGER"
     
-    assumptions = {}
-    assumptions["Extreme outliers are rare"] = {
+    tests = {}
+    tests["dataset_outlier_ratio"] = {
+        "check_id": "dataset_outlier_ratio",
+        "metric": ratio,
         "status": status,
-        "evidence": {"outlier_ratio" : ratio}
+        "risk_code": "OUTLIER_SENSITIVITY",
+        "scope": "DATASET"
     }
     
     constraints = []
     if status in ["WARNING", "DANGER"]:
         constraints.append("Mean and scale-based statistics are unreliable")
         
-    return assumptions, constraints
+    return tests, constraints
 
 #^ checking mixed
 def analyze_mixed(signal_output: dict):
@@ -267,22 +313,25 @@ def analyze_mixed(signal_output: dict):
     else:
         status = "DANGER"
     
-    assumptions = {}
-    assumptions["Mixed columns are rare"] = {
+    tests = {}
+    tests["dataset_mixed_type_ratio"] = {
+        "check_id": "dataset_mixed_type_ratio",
+        "metric" : ratio,
         "status" : status,
-        "evidence" : {"mixed_ratio" : ratio}
+        "risk_code": "TYPE_AMBIGUITY",
+        "scope": "DATASET"
     }
     constraints = []
     if status == "DANGER":
         constraints.append("Column-level type assumptions are invalid")
         
-    return assumptions, constraints
+    return tests, constraints
 
 #~ combined function 
 def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
     result = {
         "facts": {},
-        "assumptions": {},
+        "tests": {},
         "constraints": []
     }
 
@@ -295,7 +344,7 @@ def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
     logic_functions = [
         lambda: analyze_missingness(df, signal_output),
         lambda: analyze_duplicates(signal_output),
-        lambda: analyze_constant_features(signal_output),
+        lambda: analyze_constant_features(df, signal_output),
         lambda: analyze_cardinality(signal_output),
         lambda: analyze_multicollinearity(signal_output),
         lambda: analyze_outliers(signal_output),
@@ -303,16 +352,19 @@ def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
     ]
 
     for fn in logic_functions:
-        asm, cons = fn()
+        tests, cons = fn()
 
-        # Merge assumptions (flat)
-        for k, v in asm.items():
-            if k in result["assumptions"]:
-                raise ValueError(f"Duplicate assumption ID: {k}")
-            result["assumptions"][k] = v
+        # Merge tests (flat)
+        for k, v in tests.items():
+            if k in result["tests"]:
+                raise ValueError(f"Duplicate test ID: {k}")
+            result["tests"][k] = v
 
         # Merge constraints (list)
         result["constraints"].extend(cons)
+
+    # Add verdicts to all tests based on risk_code and status
+    result["tests"] = add_verdicts_to_tests(result["tests"])
 
     return result
 

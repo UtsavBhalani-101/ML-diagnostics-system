@@ -116,6 +116,7 @@ Thumbs.db
 # Work / Scratch Files
 # ========================
 engine/Layer_2/Signals/Numeric/Phase_A/markdown_files
+samples_testing_files/
 
 
 # ========================
@@ -126,6 +127,7 @@ tests/
 
 # Layer 1 files
 engine/Layer_1/LAYER1_DOCS.md
+engine/Layer_1/risk_template.py
 
 
 # Layer 2 testing files

@@ -300,7 +300,7 @@ def test_logic_module(df: pd.DataFrame, signal_output: dict) -> dict:
     # Test 3: extract_feature_mix
     print("\n[3/8] Testing extract_feature_mix...")
     try:
-        feature_mix = logic.extract_feature_mix(df)
+        feature_mix = logic.extract_feature_mix(signal_output)
         results["tests"]["extract_feature_mix"] = {
             "status": "PASS",
             "output": feature_mix
@@ -339,7 +339,7 @@ def test_logic_module(df: pd.DataFrame, signal_output: dict) -> dict:
     # Test 6: analyze_constant_features
     print("\n[6/8] Testing analyze_constant_features...")
     try:
-        constants = logic.analyze_constant_features(signal_output)
+        constants = logic.analyze_constant_features(df, signal_output)
         results["tests"]["analyze_constant_features"] = {
             "status": "PASS",
             "output": constants
