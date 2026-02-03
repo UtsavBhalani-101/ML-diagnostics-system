@@ -14,7 +14,7 @@ export default function Header() {
   ];
 
   return (
-    <header className="w-full border-b border-black/5 dark:border-white/5 bg-[#f6f6f8]/80 dark:bg-[#101622]/80 backdrop-blur-md sticky top-0 z-50">
+    <header className="w-full border-b border-black/5 dark:border-white/10 bg-[#f6f6f8]/80 dark:bg-black/80 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3">
@@ -46,7 +46,7 @@ export default function Header() {
 
       {/* Mobile Navigation */}
       {mobileMenuOpen && (
-        <nav className="md:hidden border-t border-white/5 bg-[#101622] px-6 py-4">
+        <nav className="md:hidden border-t border-white/10 bg-black px-6 py-4">
           <div className="flex flex-col gap-4">
             {navTabs.map(({ href, label }) => (
               <Link

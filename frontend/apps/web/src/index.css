@@ -10,9 +10,9 @@
 :root {
   --primary: #135bec;
   --background-light: #f6f6f8;
-  --background-dark: #101622;
-  --charcoal: #1A1A1A;
-  --surface: #1E232F;
+  --background-dark: #000000;
+  --charcoal: #000000;
+  --surface: #0a0a0a;
 
   --background: var(--background-light);
   --foreground: #0f172a;
