@@ -1,24 +1,29 @@
 import type { Metadata } from "next";
 
-import { Geist, Geist_Mono } from "next/font/google";
-
 import "../index.css";
 import Header from "@/components/header";
+import Footer from "@/components/footer";
 import Providers from "@/components/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "frontend",
-  description: "frontend",
+  title: "Diagnostic System - Staging Area",
+  description:
+    "A diagnostic-first system that evaluates data readiness, structural integrity, and modeling risk before you commit to any ML pipeline.",
+  keywords: [
+    "machine learning",
+    "data quality",
+    "diagnostics",
+    "data validation",
+    "ML pipeline",
+    "data readiness",
+  ],
+  authors: [{ name: "Diagnostic Sys" }],
+  openGraph: {
+    title: "Diagnostic System - Staging Area",
+    description:
+      "Diagnostics First. Modeling Second. Meticulous tools for high-stakes ML execution.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -27,13 +32,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="flex flex-col min-h-screen">
         <Providers>
-          <div className="grid grid-rows-[auto_1fr] h-svh">
-            <Header />
-            {children}
-          </div>
+          <Header />
+          <div className="flex-grow">{children}</div>
+          <Footer />
         </Providers>
       </body>
     </html>
