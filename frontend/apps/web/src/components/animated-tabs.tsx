@@ -1,18 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 
 export interface AnimatedTabsProps {
     tabs: { label: string; href: string }[];
 }
 
 export function AnimatedTabs({ tabs }: AnimatedTabsProps) {
-    const [activeTab, setActiveTab] = useState(tabs[0].label);
     const containerRef = useRef<HTMLDivElement>(null);
     const activeTabRef = useRef<HTMLButtonElement>(null);
     const router = useRouter();
+    const pathname = usePathname();
+
+    // Find the active tab based on current pathname
+    const activeTab = tabs.find((tab) => pathname === tab.href)?.label || null;
 
     useEffect(() => {
         const container = containerRef.current;
@@ -32,11 +35,13 @@ export function AnimatedTabs({ tabs }: AnimatedTabsProps) {
                     (clipLeft / container.offsetWidth) * 100
                 ).toFixed()}% round 17px)`;
             }
+        } else if (container && !activeTab) {
+            // No active tab (e.g., on home page) - hide the highlight
+            container.style.clipPath = `inset(0 100% 0 0% round 17px)`;
         }
-    }, [activeTab]);
+    }, [activeTab, pathname]);
 
-    const handleTabClick = (label: string, href: string) => {
-        setActiveTab(label);
+    const handleTabClick = (href: string) => {
         router.push(href);
     };
 
@@ -44,13 +49,13 @@ export function AnimatedTabs({ tabs }: AnimatedTabsProps) {
         <div className="relative bg-secondary/50 border border-primary/10 mx-auto flex w-fit flex-col items-center rounded-full py-2 px-4">
             <div
                 ref={containerRef}
-                className="absolute z-10 w-full overflow-hidden [clip-path:inset(0px_75%_0px_0%_round_17px)] [transition:clip-path_0.25s_ease]"
+                className="absolute z-10 w-full overflow-hidden [clip-path:inset(0px_100%_0px_0%_round_17px)] [transition:clip-path_0.25s_ease]"
             >
                 <div className="relative flex w-full justify-center bg-primary">
                     {tabs.map((tab, index) => (
                         <button
                             key={index}
-                            onClick={() => handleTabClick(tab.label, tab.href)}
+                            onClick={() => handleTabClick(tab.href)}
                             className="flex h-8 items-center rounded-full p-3 text-sm font-medium text-primary-foreground"
                             tabIndex={-1}
                         >
@@ -68,7 +73,7 @@ export function AnimatedTabs({ tabs }: AnimatedTabsProps) {
                         <button
                             key={index}
                             ref={isActive ? activeTabRef : null}
-                            onClick={() => handleTabClick(label, href)}
+                            onClick={() => handleTabClick(href)}
                             className="flex h-8 items-center cursor-pointer rounded-full p-3 text-sm font-medium text-muted-foreground"
                         >
                             {label}
