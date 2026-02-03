@@ -1,6 +1,7 @@
 "use client";
 
 import { Activity } from "lucide-react";
+import FileUpload from "@/components/file-upload";
 
 export default function DiagnosticsPage() {
     return (
@@ -8,24 +9,32 @@ export default function DiagnosticsPage() {
             {/* Grid Pattern Background */}
             <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
 
-            <section className="relative z-10 flex flex-col items-center justify-center flex-grow py-32 px-6">
-                <div className="max-w-2xl w-full text-center">
-                    <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 text-primary mb-6">
-                        <Activity className="size-8" />
+            <section className="relative z-10 flex flex-col items-center py-16 px-6">
+                {/* Page Header */}
+                <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center size-14 rounded-full bg-primary/10 text-primary mb-4">
+                        <Activity className="size-7" />
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-foreground">
-                        Diagnostics
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3 text-foreground">
+                        Run Diagnostics
                     </h1>
-                    <p className="text-lg text-muted-foreground font-mono mb-8">
-                        This section is coming soon.
+                    <p className="text-muted-foreground font-mono max-w-lg mx-auto">
+                        Upload your dataset to analyze data quality, detect anomalies,
+                        and assess modeling readiness.
                     </p>
-                    <div className="border border-border rounded-lg p-8 bg-card/50 backdrop-blur-sm">
-                        <p className="text-muted-foreground font-mono text-sm">
-                            Upload your dataset to begin the diagnostic process.
-                            The system will analyze data quality, detect anomalies,
-                            and assess modeling readiness.
-                        </p>
-                    </div>
+                </div>
+
+                {/* File Upload Component */}
+                <FileUpload />
+
+                {/* Status Info */}
+                <div className="mt-8 flex flex-row gap-6 opacity-50">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                        Layer 1: Data Profiling
+                    </span>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                        Status: Awaiting Upload
+                    </span>
                 </div>
             </section>
         </main>
