@@ -5,6 +5,7 @@ import "../index.css";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import Providers from "@/components/providers";
+import { LenisProvider } from "@/components/lenis-provider";
 
 export const metadata: Metadata = {
   title: "Diagnostic System - Staging Area",
@@ -55,9 +56,11 @@ export default function RootLayout({
       </head>
       <body className="flex flex-col min-h-screen">
         <Providers>
-          <Header />
-          <div className="flex-grow">{children}</div>
-          <Footer />
+          <LenisProvider>
+            <Header />
+            <div className="flex-grow">{children}</div>
+            <Footer />
+          </LenisProvider>
         </Providers>
       </body>
     </html>

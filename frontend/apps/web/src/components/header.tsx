@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AnimatedTabs } from "./animated-tabs";
+import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -27,12 +28,20 @@ export default function Header() {
         </Link>
 
         {/* Desktop Navigation - Animated Tabs */}
-        <nav className="hidden md:flex items-center">
+        <nav className="hidden md:flex items-center gap-6">
           <AnimatedTabs tabs={navTabs} />
+
+          {/* Theme Toggler */}
+          <AnimatedThemeToggler
+            className="size-8 flex items-center justify-center rounded-full bg-secondary/50 border border-primary/10 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+          />
         </nav>
 
-        {/* Mobile Menu Button */}
-        <div className="flex items-center gap-4 md:hidden">
+        {/* Mobile Menu Button & Theme Toggle */}
+        <div className="flex items-center gap-3 md:hidden">
+          <AnimatedThemeToggler
+            className="size-8 flex items-center justify-center rounded-full bg-secondary/50 border border-primary/10 text-muted-foreground hover:text-foreground transition-colors cursor-pointer [&_svg]:size-4"
+          />
           <button
             className="text-slate-400 hover:text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

@@ -61,22 +61,17 @@
   --radius-full: 9999px;
 }
 
-/* Custom Scrollbar */
+/* Hide Scrollbar - but keep scroll functionality */
+html {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #101622;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  display: none;
+  /* Chrome, Safari, Opera */
 }
 
 /* Grid Pattern Background */
@@ -148,4 +143,10 @@
 
 .btn-shine::before {
   background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
