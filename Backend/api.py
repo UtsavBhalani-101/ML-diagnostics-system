@@ -6,6 +6,7 @@ import re
 import json
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any, List
 
@@ -137,6 +138,20 @@ app = FastAPI(
     title="File Validation API",
     description="API for validating uploaded data files",
     version="1.0.0"
+)
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3001",  # Next.js dev server
+        "http://localhost:3000",  # Alternative port
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

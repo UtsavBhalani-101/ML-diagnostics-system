@@ -9,7 +9,9 @@ import {
     Trash2,
     Loader,
     CheckCircle,
+    AlertCircle,
 } from "lucide-react";
+import { validateFile, FileValidationResponse } from "@/lib/api";
 
 interface FileWithPreview {
     id: string;
@@ -20,15 +22,22 @@ interface FileWithPreview {
     type: string;
     lastModified?: number;
     file?: File;
+    status: "uploading" | "success" | "error";
+    error?: string;
+    response?: FileValidationResponse;
 }
 
-export default function FileUpload() {
+interface FileUploadProps {
+    onFileValidated?: (response: FileValidationResponse) => void;
+}
+
+export default function FileUpload({ onFileValidated }: FileUploadProps) {
     const [files, setFiles] = useState<FileWithPreview[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Process dropped or selected files
-    const handleFiles = (fileList: FileList) => {
+    const handleFiles = async (fileList: FileList) => {
         const newFiles = Array.from(fileList).map((file) => ({
             id: `${URL.createObjectURL(file)}-${Date.now()}`,
             preview: URL.createObjectURL(file),
@@ -38,26 +47,79 @@ export default function FileUpload() {
             type: file.type,
             lastModified: file.lastModified,
             file,
+            status: "uploading" as const,
         }));
+
         setFiles((prev) => [...prev, ...newFiles]);
-        newFiles.forEach((f) => simulateUpload(f.id));
+
+        // Upload each file to the backend
+        for (const fileItem of newFiles) {
+            await uploadFile(fileItem);
+        }
     };
 
-    // Simulate upload progress
-    const simulateUpload = (id: string) => {
+    // Upload file to backend
+    const uploadFile = async (fileItem: FileWithPreview) => {
+        if (!fileItem.file) return;
+
+        // Simulate progress while uploading
         let progress = 0;
-        const interval = setInterval(() => {
-            progress += Math.random() * 15;
+        const progressInterval = setInterval(() => {
+            progress += Math.random() * 20;
+            if (progress > 90) progress = 90; // Cap at 90% until actual completion
             setFiles((prev) =>
                 prev.map((f) =>
-                    f.id === id ? { ...f, progress: Math.min(progress, 100) } : f
+                    f.id === fileItem.id ? { ...f, progress: Math.min(progress, 90) } : f
                 )
             );
-            if (progress >= 100) {
-                clearInterval(interval);
-                if (navigator.vibrate) navigator.vibrate(100);
+        }, 200);
+
+        try {
+            // Call the backend API
+            const response = await validateFile(fileItem.file);
+
+            clearInterval(progressInterval);
+
+            // Update file status based on response
+            setFiles((prev) =>
+                prev.map((f) =>
+                    f.id === fileItem.id
+                        ? {
+                            ...f,
+                            progress: 100,
+                            status: response.is_valid ? "success" : "error",
+                            error: response.error || undefined,
+                            response,
+                        }
+                        : f
+                )
+            );
+
+            // Notify parent component
+            if (response.is_valid && onFileValidated) {
+                onFileValidated(response);
             }
-        }, 300);
+
+            // Haptic feedback on success
+            if (response.is_valid && navigator.vibrate) {
+                navigator.vibrate(100);
+            }
+        } catch (error) {
+            clearInterval(progressInterval);
+
+            setFiles((prev) =>
+                prev.map((f) =>
+                    f.id === fileItem.id
+                        ? {
+                            ...f,
+                            progress: 100,
+                            status: "error",
+                            error: error instanceof Error ? error.message : "Upload failed",
+                        }
+                        : f
+                )
+            );
+        }
     };
 
     const onDrop = (e: DragEvent) => {
@@ -83,6 +145,10 @@ export default function FileUpload() {
         const sizes = ["Bytes", "KB", "MB", "GB"];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+    };
+
+    const removeFile = (id: string) => {
+        setFiles((prev) => prev.filter((f) => f.id !== id));
     };
 
     return (
@@ -212,38 +278,34 @@ export default function FileUpload() {
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: -20, scale: 0.95 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                                className="px-4 py-4 flex items-start gap-4 rounded-xl bg-card/80 border border-border shadow hover:shadow-md transition-all duration-200"
+                                className={clsx(
+                                    "px-4 py-4 flex items-start gap-4 rounded-xl border shadow hover:shadow-md transition-all duration-200",
+                                    file.status === "error"
+                                        ? "bg-red-500/10 border-red-500/30"
+                                        : "bg-card/80 border-border"
+                                )}
                             >
                                 {/* Thumbnail */}
                                 <div className="relative flex-shrink-0">
-                                    {file.type.startsWith("image/") ? (
-                                        <img
-                                            src={file.preview}
-                                            alt={file.name}
-                                            className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover border border-border shadow-sm"
-                                        />
-                                    ) : file.type.startsWith("video/") ? (
-                                        <video
-                                            src={file.preview}
-                                            className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover border border-border shadow-sm"
-                                            controls={false}
-                                            muted
-                                            loop
-                                            playsInline
-                                            preload="metadata"
-                                        />
-                                    ) : (
-                                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-secondary/50 border border-border flex items-center justify-center">
-                                            <FileIcon className="w-8 h-8 text-muted-foreground" />
-                                        </div>
-                                    )}
-                                    {file.progress === 100 && (
+                                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-secondary/50 border border-border flex items-center justify-center">
+                                        <FileIcon className="w-8 h-8 text-muted-foreground" />
+                                    </div>
+                                    {file.status === "success" && (
                                         <motion.div
                                             initial={{ opacity: 0, scale: 0.5 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             className="absolute -right-2 -bottom-2 bg-background rounded-full shadow-sm"
                                         >
                                             <CheckCircle className="w-5 h-5 text-emerald-500" />
+                                        </motion.div>
+                                    )}
+                                    {file.status === "error" && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="absolute -right-2 -bottom-2 bg-background rounded-full shadow-sm"
+                                        >
+                                            <AlertCircle className="w-5 h-5 text-red-500" />
                                         </motion.div>
                                     )}
                                 </div>
@@ -262,25 +324,31 @@ export default function FileUpload() {
                                             </h4>
                                         </div>
 
+                                        {/* Error message */}
+                                        {file.error && (
+                                            <p className="text-sm text-red-500 font-mono">
+                                                {file.error}
+                                            </p>
+                                        )}
+
                                         {/* Details & remove/loading */}
                                         <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
                                             <span className="text-xs md:text-sm font-mono">
                                                 {formatFileSize(file.size)}
+                                                {file.response?.extension && ` • ${file.response.extension}`}
                                             </span>
                                             <span className="flex items-center gap-1.5">
                                                 <span className="font-medium">
                                                     {Math.round(file.progress)}%
                                                 </span>
-                                                {file.progress < 100 ? (
+                                                {file.status === "uploading" ? (
                                                     <Loader className="w-4 h-4 animate-spin text-primary" />
                                                 ) : (
                                                     <Trash2
                                                         className="w-4 h-4 cursor-pointer text-muted-foreground hover:text-destructive transition-colors duration-200"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setFiles((prev) =>
-                                                                prev.filter((f) => f.id !== file.id)
-                                                            );
+                                                            removeFile(file.id);
                                                         }}
                                                         aria-label="Remove file"
                                                     />
@@ -302,7 +370,11 @@ export default function FileUpload() {
                                             }}
                                             className={clsx(
                                                 "h-full rounded-full shadow-inner",
-                                                file.progress < 100 ? "bg-primary" : "bg-emerald-500"
+                                                file.status === "error"
+                                                    ? "bg-red-500"
+                                                    : file.status === "success"
+                                                        ? "bg-emerald-500"
+                                                        : "bg-primary"
                                             )}
                                         />
                                     </div>

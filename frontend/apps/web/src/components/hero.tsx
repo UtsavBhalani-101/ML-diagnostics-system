@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { MoveRight, Play } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/status-badge";
 
 function Hero() {
     const [titleNumber, setTitleNumber] = useState(0);
@@ -29,17 +30,7 @@ function Hero() {
             <div className="container mx-auto">
                 <div className="flex gap-6 py-16 lg:py-24 items-center justify-center flex-col">
                     {/* Status Badge */}
-                    <div>
-                        <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/10">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                            </span>
-                            <span className="text-[10px] font-mono font-medium text-primary uppercase tracking-widest">
-                                System Operational
-                            </span>
-                        </div>
-                    </div>
+                    <StatusBadge status="info" message="System Operational" />
 
                     {/* Main Headline */}
                     <div className="flex gap-3 flex-col">
