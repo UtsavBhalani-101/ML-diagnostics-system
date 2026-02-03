@@ -214,6 +214,41 @@ async def supported_extensions() -> SupportedExtensionsResponse:
     )
 
 
+@app.get(
+    "/",
+    summary="Home Page",
+    description="Welcome page with API overview and available endpoints."
+)
+async def home():
+    """
+    Home page endpoint that provides an overview of the ML Diagnostics API.
+    """
+    return {
+        "message": "Welcome to ML Diagnostics API",
+        "version": "1.0.0",
+        "description": "API for validating and analyzing machine learning datasets",
+        "endpoints": {
+            "GET /": "Home page (this page)",
+            "GET /health": "Health check endpoint",
+            "GET /docs": "Interactive API documentation (Swagger UI)",
+            "GET /redoc": "Alternative API documentation (ReDoc)",
+            "POST /validate-file": "Upload and validate a data file",
+            "GET /supported-extensions": "List supported file formats",
+            "GET /dataset-columns": "View columns in uploaded dataset",
+            "POST /set-target-column": "Set the target column for analysis",
+            "POST /run-analysis": "Run Layer 1 analysis on uploaded file",
+            "GET /layer-1-output": "Get Layer 1 analysis results"
+        },
+        "workflow": [
+            "1. Upload a file using POST /validate-file",
+            "2. View available columns using GET /dataset-columns",
+            "3. Set target column using POST /set-target-column",
+            "4. Run analysis using POST /run-analysis",
+            "5. View results using GET /layer-1-output"
+        ]
+    }
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
