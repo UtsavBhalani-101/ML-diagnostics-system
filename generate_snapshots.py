@@ -30,7 +30,7 @@ from engine.Layer_1.pipeline import run_pipeline
 # Configuration
 # ============================================================
 
-TEST_DATA_PATH = r"D:\ML diagnose v1\uploads\adult.csv"
+TEST_DATA_PATH = r"D:\ML diagnose v1\test_files\adult.csv"
 TESTS_DIR = "tests"
 LAYER1_TESTS_DIR = os.path.join(TESTS_DIR, "layer1")
 

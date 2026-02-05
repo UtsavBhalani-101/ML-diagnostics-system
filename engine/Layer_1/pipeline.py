@@ -4,6 +4,7 @@ import traceback
 from engine.Layer_1 import signals
 from engine.Layer_1 import logic
 from engine.Layer_1 import report
+from Backend.file_support_check import load_dataframe_from_file
 
 
 def convert_numpy_types(obj):
@@ -43,9 +44,9 @@ def run_pipeline(file_path):
     results = {}
     
     try:
-        # 1. Load the data
+        # 1. Load the data using universal loader (supports all formats)
         print("Loading data...")
-        df = pd.read_csv(file_path)
+        df = load_dataframe_from_file(file_path)
         results['data_loaded'] = True
         results['shape'] = df.shape
         

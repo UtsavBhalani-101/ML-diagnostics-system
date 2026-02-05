@@ -52,7 +52,7 @@ env/
 # ========================
 # Uploads & Data Files
 # ========================
-uploads/
+test_files/
 results/
 *.csv
 *.xlsx
@@ -63,6 +63,7 @@ results/
 !package.json
 !package-lock.json
 !tsconfig.json
+commands.txt
 
 # ========================
 # Node.js / Frontend

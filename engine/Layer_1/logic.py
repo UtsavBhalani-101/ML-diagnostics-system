@@ -35,9 +35,21 @@ def extract_memory_footprint(signals: dict) -> dict:
 
 
 #^ key facts - feature mix
-def extract_feature_mix(df: pd.DataFrame):
-    num_ratio = df['Metadata']['Numerical Columns Ratio']
-    cat_ratio = df['Metadata']['Valid Categorical Columns Ratio'] #! fix this valid name thing from the signal
+def extract_feature_mix(signal_output: dict):
+    """
+    Extract feature mix information from signal output.
+    
+    Args:
+        signal_output: Dictionary containing metadata from signals.run_signals_extraction()
+        
+    Returns:
+        Dictionary with mix_type, num_ratio, and cat_ratio
+    """
+    # Access metadata from signal_output (NOT a DataFrame)
+    metadata = signal_output.get('Metadata', {})
+    num_ratio = metadata.get('Numerical Columns Ratio', 0.0)
+    cat_ratio = metadata.get('Valid Categorical Columns Ratio', 0.0)
+    
     mix_type = ""
 
     if cat_ratio >= 0.55:

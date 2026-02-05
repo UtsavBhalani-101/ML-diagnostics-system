@@ -92,7 +92,33 @@ def find_dtype(df: pd.DataFrame):
     
 
 if __name__ == "__main__":
-    data = pd.read_csv(r'D:\ML diagnose v1\tests\snapshot_normalized.csv')
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python divide_dtype.py <path_to_data_file>")
+        print("Example: python divide_dtype.py data.csv")
+        sys.exit(1)
+    
+    file_path = sys.argv[1]
+    
+    # Read data using pandas read function (supports multiple formats)
+    try:
+        # Try reading as CSV first (most common)
+        if file_path.endswith('.csv'):
+            data = pd.read_csv(file_path)
+        elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
+            data = pd.read_excel(file_path)
+        elif file_path.endswith('.parquet'):
+            data = pd.read_parquet(file_path)
+        elif file_path.endswith('.json'):
+            data = pd.read_json(file_path)
+        else:
+            # Default to CSV
+            data = pd.read_csv(file_path)
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        sys.exit(1)
+    
     numeric_cols, categorical_cols, mixed_cols, identifier_cols, text_cols, datetime_cols = find_dtype(data)
     
     print("=" * 50)

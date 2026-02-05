@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any, List
 
-from Backend.file_support_check import validate_and_load, get_supported_extensions
+from Backend.file_support_check import validate_and_load, get_supported_extensions, load_dataframe_from_file
 from engine.Layer_1.pipeline import run_pipeline
 
 
@@ -365,7 +365,7 @@ async def get_dataset_columns() -> DatasetColumnsResponse:
         )
     
     try:
-        df = pd.read_csv(file_path)
+        df = load_dataframe_from_file(file_path)
         columns = df.columns.tolist()
         
         return DatasetColumnsResponse(
@@ -416,7 +416,7 @@ async def set_target_column(request: TargetColumnRequest) -> TargetColumnRespons
         )
     
     try:
-        df = pd.read_csv(file_path)
+        df = load_dataframe_from_file(file_path)
         columns = df.columns.tolist()
         target_col = request.target_column
         

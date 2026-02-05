@@ -187,9 +187,31 @@ def run_full_layer2_pipeline(df: pd.DataFrame) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import json
+    import sys
     
-    # Test with sample data
-    test_data = pd.read_csv(r'D:\ML diagnose v1\tests\snapshot_normalized.csv')
+    if len(sys.argv) < 2:
+        print("Usage: python phase_a_pipeline.py <path_to_data_file>")
+        print("Example: python phase_a_pipeline.py data.csv")
+        sys.exit(1)
+    
+    file_path = sys.argv[1]
+    
+    # Read data using pandas - supports multiple formats
+    try:
+        if file_path.endswith('.csv'):
+            test_data = pd.read_csv(file_path)
+        elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
+            test_data = pd.read_excel(file_path)
+        elif file_path.endswith('.parquet'):
+            test_data = pd.read_parquet(file_path)
+        elif file_path.endswith('.json'):
+            test_data = pd.read_json(file_path)
+        else:
+            # Default to CSV
+            test_data = pd.read_csv(file_path)
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        sys.exit(1)
     
     print("=" * 60)
     print("LAYER 2 - PHASE A PIPELINE TEST")
@@ -209,3 +231,4 @@ if __name__ == "__main__":
         first_col = list(results["phase_a_results"]["columns"].keys())[0]
         print(f"\nSample output for '{first_col}':")
         print(json.dumps(results["phase_a_results"]["columns"][first_col], indent=2, default=str))
+
