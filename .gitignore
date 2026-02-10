@@ -52,6 +52,7 @@ env/
 # ========================
 # Uploads & Data Files
 # ========================
+system_states.txt
 test_files/
 results/
 *.csv

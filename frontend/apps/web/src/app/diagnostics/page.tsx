@@ -29,6 +29,14 @@ export default function DiagnosticsPage() {
         }
     };
 
+    const handleUploadReset = () => {
+        setUploadedFile(null);
+        setValidationError(null);
+        setAnalysisResult(null);
+        setAnalysisError(null);
+        setState("idle");
+    };
+
     const handleRunAnalysis = async () => {
         setState("running");
         setAnalysisError(null);
@@ -105,7 +113,7 @@ export default function DiagnosticsPage() {
                 </div>
 
                 {/* File Upload Component */}
-                <FileUpload onFileValidated={handleFileValidated} />
+                <FileUpload onFileValidated={handleFileValidated} onReset={handleUploadReset} />
 
                 {/* Run Analysis Button - Show when file is uploaded */}
                 {(state === "file-uploaded" || state === "running") && (
