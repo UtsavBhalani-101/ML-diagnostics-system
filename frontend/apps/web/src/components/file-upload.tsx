@@ -63,11 +63,13 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
             setProgress(100);
             setValidationResponse(response);
 
+            // Notify parent component for both valid and invalid results
+            if (onFileValidated) {
+                onFileValidated(response);
+            }
+
             if (response.is_valid) {
                 setStatus("success");
-                if (onFileValidated) {
-                    onFileValidated(response);
-                }
                 // Haptic feedback on success
                 if (navigator.vibrate) {
                     navigator.vibrate(100);
