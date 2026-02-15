@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Activity, Play } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import FileUpload from "@/components/file-upload";
@@ -12,6 +13,7 @@ import type { FileValidationResponse, Layer1OutputResponse } from "@/lib/api";
 type DiagnosticState = "idle" | "file-uploaded" | "running" | "complete" | "error";
 
 export default function DiagnosticsPage() {
+    const router = useRouter();
     const [state, setState] = useState<DiagnosticState>("idle");
     const [uploadedFile, setUploadedFile] = useState<FileValidationResponse | null>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export default function DiagnosticsPage() {
             const result = await runAnalysis();
             setAnalysisResult(result);
             setState("complete");
+            router.push("/diagnostics/layer1-report");
         } catch (err) {
             setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
             setState("error");
