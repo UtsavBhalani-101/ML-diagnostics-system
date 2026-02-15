@@ -105,6 +105,16 @@ export default function Layer1ReportPage() {
                     <span className="text-sm font-mono text-foreground">Layer 1 Report</span>
                 </div>
 
+                {/* ── Layer Context Tag ── */}
+                <div className="mb-1">
+                    <p className="text-sm font-semibold font-mono tracking-wide text-muted-foreground">
+                        Layer 1 — Global Structural Validation
+                    </p>
+                    <p className="text-xs font-mono text-muted-foreground/75 mt-0.5">
+                        Pre-model structural integrity assessment.
+                    </p>
+                </div>
+
                 {/* ══════ 1. Overall Status Banner ══════ */}
                 <div className={`rounded-xl border ${overall.border} ${overall.bg} p-6 flex items-center gap-5`}>
                     <div className={`size-14 rounded-full ${overall.bg} border ${overall.border} flex items-center justify-center shrink-0`}>
