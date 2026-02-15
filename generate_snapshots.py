@@ -483,6 +483,11 @@ def test_pipeline_integration(file_path: str) -> dict:
         
         save_json(pipeline_output, "pipeline_output.json")
         
+        # Save formatted final output separately
+        if "final_output" in pipeline_output:
+            save_json(pipeline_output["final_output"], "final_output.json")
+            print(f"  ✓ Final formatted output saved")
+        
     except Exception as e:
         results["tests"]["run_pipeline"] = {"status": "FAIL", "error": str(e)}
         print(f"  ✗ Error: {e}")

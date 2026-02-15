@@ -13,7 +13,6 @@ def print_layer1_report(result: dict) -> None:
         result: Dictionary from logic.run_logic_extraction() with structure:
             - facts: {dimensions, memory, feature_mix}
             - tests: {test_name: {check_id, metric, status, risk_code, scope, verdict}}
-            - constraints: [list of constraint strings]
     """
     print("\n" + "="*60)
     print("           DATASET TRIAGE (LAYER 1)")
@@ -100,22 +99,7 @@ def print_layer1_report(result: dict) -> None:
             print(f"   Columns:    {details['column']}")
     
     # ============================================================
-    # Section 3: Constraints
-    # ============================================================
-    constraints = result.get("constraints", [])
-    
-    print("\n" + "="*60)
-    print("           CONSTRAINTS")
-    print("="*60)
-    
-    if constraints:
-        for i, constraint in enumerate(constraints, 1):
-            print(f"\n  {i}. [!] {constraint}")
-    else:
-        print("\n  [OK] No constraints detected.")
-    
-    # ============================================================
-    # Section 4: Summary
+    # Section 3: Summary
     # ============================================================
     print("\n" + "="*60)
     print("           SUMMARY")
@@ -131,7 +115,6 @@ def print_layer1_report(result: dict) -> None:
     
     print(f"\n  Overall Health: {overall_health}")
     print(f"  Tests:          {safe_count} SAFE, {warning_count} WARNING, {danger_count} DANGER")
-    print(f"  Constraints:    {len(constraints)} identified")
     
     print("\n" + "="*60 + "\n")
 
@@ -178,6 +161,5 @@ if __name__ == "__main__":
                 "verdict": "Near-constant features detected. These should be removed before modeling."
             }
         },
-        "constraints": ["Row-wise deletion unsafe; high missingness in: ['col1', 'col2']"]
     }
     print_layer1_report(sample_result)

@@ -77,7 +77,7 @@ class Layer1OutputResponse(BaseModel):
     shape: list[int] = Field(..., description="Shape of the dataset [rows, columns]")
     signals: dict[str, Any] = Field(..., description="Signal metrics from Layer 1 analysis")
     logic: dict[str, Any] = Field(..., description="Logic analysis results")
-    report: str = Field(..., description="Human-readable report text")
+    final_output: dict[str, Any] = Field(..., description="Formatted output for frontend display")
     status: str = Field(..., description="Status of the pipeline execution")
 
 

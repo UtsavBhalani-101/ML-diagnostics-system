@@ -151,14 +151,7 @@ def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshol
         "scope": "DATASET"
     }
 
-    constraints = []
-    if critical_count > 0:
-        constraints.append(f"Row-wise deletion unsafe; high missingness in: {critical_cols}")
-        
-    if semantic_missing_found:
-        constraints.append(f"Hidden missing values detected (e.g. '?', 'NA'). Preprocessing required to handle them.")
-
-    return tests, constraints
+    return tests
    
 #^ checking duplicates  
 def analyze_duplicates(signal_output:dict):
@@ -181,14 +174,7 @@ def analyze_duplicates(signal_output:dict):
         "scope" : "DATASET"
     }
     
-    constraints = []
-    if status == "WARNING":
-        constraints.append("Minor row-level bias detected; consider deduplication.")
-    elif status == "DANGER":
-        constraints.append("CRITICAL: Significant row-level bias. Statistics are unreliable.")
-        
-
-    return tests, constraints
+    return tests
 
 #^ checking constant 
 def analyze_constant_features(df: pd.DataFrame, signal_output: dict):
@@ -226,14 +212,7 @@ def analyze_constant_features(df: pd.DataFrame, signal_output: dict):
         "column": flagged_columns
     }
 
-    constraints = []
-
-    if status_local in ["WARNING", "DANGER"]:
-        constraints.append(
-            "Some features may be non-informative and distort feature importance estimates"
-        )
-
-    return tests, constraints
+    return tests
 
 #^ checking cardinality
 def analyze_cardinality(signal_output: dict):
@@ -258,11 +237,7 @@ def analyze_cardinality(signal_output: dict):
         "scope": "DATASET"
     }
     
-    constraints = []
-    if status in ["WARNING", "DANGER"]:
-        constraints.append("Naive categorical encoding may cause dimensions explosion")
-    
-    return tests, constraints
+    return tests
 
 #^ checking multicollinearity
 def analyze_multicollinearity(signal_output: dict):
@@ -284,11 +259,7 @@ def analyze_multicollinearity(signal_output: dict):
         "scope": "DATASET"
     }
     
-    constraints = []
-    if status in ["WARNING", "DANGER"]:
-        constraints.append("Linear feature weights are unreliable")
-        
-    return tests, constraints
+    return tests
 
 #^ detecting outliers
 def analyze_outliers(signal_output: dict):
@@ -310,11 +281,7 @@ def analyze_outliers(signal_output: dict):
         "scope": "DATASET"
     }
     
-    constraints = []
-    if status in ["WARNING", "DANGER"]:
-        constraints.append("Mean and scale-based statistics are unreliable")
-        
-    return tests, constraints
+    return tests
 
 #^ checking mixed
 def analyze_mixed(signal_output: dict):
@@ -333,18 +300,13 @@ def analyze_mixed(signal_output: dict):
         "risk_code": "TYPE_AMBIGUITY",
         "scope": "DATASET"
     }
-    constraints = []
-    if status == "DANGER":
-        constraints.append("Column-level type assumptions are invalid")
-        
-    return tests, constraints
+    return tests
 
 #~ combined function 
 def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
     result = {
         "facts": {},
-        "tests": {},
-        "constraints": []
+        "tests": {}
     }
 
     # Facts
@@ -364,16 +326,13 @@ def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
     ]
 
     for fn in logic_functions:
-        tests, cons = fn()
+        tests = fn()
 
         # Merge tests (flat)
         for k, v in tests.items():
             if k in result["tests"]:
                 raise ValueError(f"Duplicate test ID: {k}")
             result["tests"][k] = v
-
-        # Merge constraints (list)
-        result["constraints"].extend(cons)
 
     # Add verdicts to all tests based on risk_code and status
     result["tests"] = add_verdicts_to_tests(result["tests"])
