@@ -1,24 +1,33 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, Play } from "lucide-react";
+import Link from "next/link";
+import type { Route } from "next";
+import { Activity, Play, ArrowRight } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import FileUpload from "@/components/file-upload";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { runAnalysis } from "@/lib/api";
-import type { FileValidationResponse, Layer1OutputResponse } from "@/lib/api";
-
-type DiagnosticState = "idle" | "file-uploaded" | "running" | "complete" | "error";
+import type { FileValidationResponse } from "@/lib/api";
+import { useDiagnosticsStore } from "@/lib/diagnostics-store";
 
 export default function DiagnosticsPage() {
     const router = useRouter();
-    const [state, setState] = useState<DiagnosticState>("idle");
-    const [uploadedFile, setUploadedFile] = useState<FileValidationResponse | null>(null);
-    const [validationError, setValidationError] = useState<string | null>(null);
-    const [analysisResult, setAnalysisResult] = useState<Layer1OutputResponse | null>(null);
-    const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+    // ── Read all state from global store ──
+    const state = useDiagnosticsStore((s) => s.state);
+    const uploadedFile = useDiagnosticsStore((s) => s.uploadedFile);
+    const validationError = useDiagnosticsStore((s) => s.validationError);
+    const analysisError = useDiagnosticsStore((s) => s.analysisError);
+
+    const setState = useDiagnosticsStore((s) => s.setState);
+    const setUploadedFile = useDiagnosticsStore((s) => s.setUploadedFile);
+    const setValidationError = useDiagnosticsStore((s) => s.setValidationError);
+    const setAnalysisResult = useDiagnosticsStore((s) => s.setAnalysisResult);
+    const setAnalysisError = useDiagnosticsStore((s) => s.setAnalysisError);
+    const setFileUploadInfo = useDiagnosticsStore((s) => s.setFileUploadInfo);
+    const resetAll = useDiagnosticsStore((s) => s.resetAll);
 
     const handleFileValidated = (response: FileValidationResponse) => {
         if (response.is_valid) {
@@ -32,11 +41,7 @@ export default function DiagnosticsPage() {
     };
 
     const handleUploadReset = () => {
-        setUploadedFile(null);
-        setValidationError(null);
-        setAnalysisResult(null);
-        setAnalysisError(null);
-        setState("idle");
+        resetAll();
     };
 
     const handleRunAnalysis = async () => {
@@ -84,7 +89,7 @@ export default function DiagnosticsPage() {
                                 message="Awaiting File Upload"
                             />
                         )}
-                        {state === "file-uploaded" && uploadedFile && (
+                        {(state === "file-uploaded") && uploadedFile && (
                             <StatusBadge
                                 key="success"
                                 status="success"
@@ -102,7 +107,7 @@ export default function DiagnosticsPage() {
                             <StatusBadge
                                 key="complete"
                                 status="success"
-                                message="Analysis Complete"
+                                message="Analysis Complete — Report Ready"
                             />
                         )}
                         {state === "error" && (validationError || analysisError) && (
@@ -118,7 +123,7 @@ export default function DiagnosticsPage() {
                 {/* File Upload Component */}
                 <FileUpload onFileValidated={handleFileValidated} onReset={handleUploadReset} />
 
-                {/* Run Analysis Button - Show when file is uploaded */}
+                {/* Run Analysis Button - Show when file is uploaded but not yet analyzed */}
                 {(state === "file-uploaded" || state === "running") && (
                     <div className="mt-8 flex flex-col items-center gap-4">
                         <Button
@@ -142,37 +147,15 @@ export default function DiagnosticsPage() {
                     </div>
                 )}
 
-                {/* Analysis Results */}
-                {state === "complete" && analysisResult && (
-                    <div className="mt-8 w-full max-w-4xl">
-                        <div className="border border-border rounded-xl bg-card/80 backdrop-blur overflow-hidden">
-                            {/* Results Header */}
-                            <div className="px-6 py-4 border-b border-border bg-secondary/30">
-                                <h2 className="text-xl font-semibold flex items-center gap-2">
-                                    <Activity className="size-5 text-primary" />
-                                    Layer 1 Analysis Results
-                                </h2>
-                                <p className="text-sm text-muted-foreground font-mono mt-1">
-                                    Status: {analysisResult.status} • Shape: {analysisResult.shape.join(" × ")}
-                                </p>
-                            </div>
-
-                            {/* Report */}
-                            <div className="p-6">
-                                <h3 className="font-semibold mb-3">Report</h3>
-                                <pre className="bg-secondary/50 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap text-muted-foreground">
-                                    {analysisResult.report}
-                                </pre>
-                            </div>
-
-                            {/* Signals Summary */}
-                            <div className="px-6 pb-6">
-                                <h3 className="font-semibold mb-3">Signals</h3>
-                                <pre className="bg-secondary/50 p-4 rounded-lg overflow-x-auto text-sm font-mono text-muted-foreground max-h-64 overflow-y-auto">
-                                    {JSON.stringify(analysisResult.signals, null, 2)}
-                                </pre>
-                            </div>
-                        </div>
+                {/* View Report Button - Show when analysis is complete */}
+                {state === "complete" && (
+                    <div className="mt-8 flex flex-col items-center gap-4">
+                        <Link href={"/diagnostics/layer1-report" as Route}>
+                            <Button size="lg" className="gap-2 h-12 px-8">
+                                <ArrowRight className="size-5" />
+                                View Layer 1 Report
+                            </Button>
+                        </Link>
                     </div>
                 )}
 
