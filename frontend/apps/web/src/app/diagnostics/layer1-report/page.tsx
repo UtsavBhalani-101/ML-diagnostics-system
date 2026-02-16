@@ -95,49 +95,49 @@ export default function Layer1ReportPage() {
         <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
             <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
 
-            <section className="relative z-10 w-full max-w-6xl mx-auto py-12 px-6 flex flex-col gap-8">
+            <section className="relative z-10 w-full max-w-6xl mx-auto py-14 px-8 flex flex-col gap-10">
                 {/* ── Page Header ── */}
                 <div className="flex items-center gap-3 mb-2">
-                    <Link href={"/diagnostics" as Route} className="text-muted-foreground hover:text-foreground transition-colors text-sm font-mono">
+                    <Link href={"/diagnostics" as Route} className="text-muted-foreground hover:text-foreground transition-colors text-base font-mono">
                         ← Diagnostics
                     </Link>
                     <span className="text-muted-foreground/40">/</span>
-                    <span className="text-sm font-mono text-foreground">Layer 1 Report</span>
+                    <span className="text-base font-mono text-foreground">Layer 1 Report</span>
                 </div>
 
                 {/* ── Layer Context Tag ── */}
                 <div className="mb-1">
-                    <p className="text-sm font-semibold font-mono tracking-wide text-muted-foreground">
+                    <p className="text-base font-semibold font-mono tracking-wide text-muted-foreground">
                         Layer 1 — Global Structural Validation
                     </p>
-                    <p className="text-xs font-mono text-muted-foreground/75 mt-0.5">
+                    <p className="text-sm font-mono text-muted-foreground/75 mt-0.5">
                         Pre-model structural integrity assessment.
                     </p>
                 </div>
 
                 {/* ══════ 1. Overall Status Banner ══════ */}
-                <div className={`rounded-xl border ${overall.border} ${overall.bg} p-6 flex items-center gap-5`}>
-                    <div className={`size-14 rounded-full ${overall.bg} border ${overall.border} flex items-center justify-center shrink-0`}>
+                <div className={`rounded-xl border ${overall.border} ${overall.bg} p-7 flex items-center gap-6`}>
+                    <div className={`size-16 rounded-full ${overall.bg} border ${overall.border} flex items-center justify-center shrink-0`}>
                         {data.overall_status.toUpperCase() === "SAFE" ? (
-                            <ShieldCheck className={`size-7 ${overall.text}`} />
+                            <ShieldCheck className={`size-8 ${overall.text}`} />
                         ) : (
-                            <ShieldAlert className={`size-7 ${overall.text}`} />
+                            <ShieldAlert className={`size-8 ${overall.text}`} />
                         )}
                     </div>
                     <div>
-                        <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-1">
+                        <p className="text-sm font-mono uppercase tracking-widest text-muted-foreground mb-1">
                             Overall Data Risk
                         </p>
-                        <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${overall.text}`}>
+                        <h2 className={`text-3xl md:text-4xl font-bold tracking-tight ${overall.text}`}>
                             {data.overall_status.toUpperCase()}
                         </h2>
                     </div>
-                    <div className={`ml-auto size-3 rounded-full ${overall.dot} animate-pulse`} />
+                    <div className={`ml-auto size-3.5 rounded-full ${overall.dot} animate-pulse`} />
                 </div>
 
                 {/* ══════ 2. Summary Cards ══════ */}
                 {summary && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
                         <SummaryCard label="Total Tests" value={safe(summary.total_tests)} accent="text-primary" />
                         <SummaryCard label="Critical" value={safe(summary.critical)} accent="text-red-400" />
                         <SummaryCard label="Warning" value={safe(summary.warning)} accent="text-amber-400" />
@@ -147,15 +147,15 @@ export default function Layer1ReportPage() {
 
                 {/* ══════ 3. Key Facts ══════ */}
                 {facts && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {/* Dataset Size */}
                         {facts.size && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Database className="size-4 text-primary" />
-                                    <h3 className="text-sm font-semibold uppercase tracking-wide">Dataset Size</h3>
+                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
+                                <div className="flex items-center gap-2.5 mb-5">
+                                    <Database className="size-5 text-primary" />
+                                    <h3 className="text-base font-semibold uppercase tracking-wide">Dataset Size</h3>
                                 </div>
-                                <div className="space-y-2 text-sm font-mono">
+                                <div className="space-y-3 text-base font-mono">
                                     <Fact label="Rows" value={safe(facts.size.rows?.toLocaleString())} />
                                     <Fact label="Columns" value={safe(facts.size.columns)} />
                                     <Fact label="Scale" value={safe(facts.size.scale)} />
@@ -164,12 +164,12 @@ export default function Layer1ReportPage() {
                         )}
                         {/* Memory */}
                         {facts.memory && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <HardDrive className="size-4 text-primary" />
-                                    <h3 className="text-sm font-semibold uppercase tracking-wide">Memory</h3>
+                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
+                                <div className="flex items-center gap-2.5 mb-5">
+                                    <HardDrive className="size-5 text-primary" />
+                                    <h3 className="text-base font-semibold uppercase tracking-wide">Memory</h3>
                                 </div>
-                                <div className="space-y-2 text-sm font-mono">
+                                <div className="space-y-3 text-base font-mono">
                                     <Fact label="Usage" value={facts.memory.usage_mb != null ? `${facts.memory.usage_mb} MB` : "N/A"} />
                                     <Fact label="Class" value={safe(facts.memory.class)} />
                                 </div>
@@ -177,12 +177,12 @@ export default function Layer1ReportPage() {
                         )}
                         {/* Feature Mix */}
                         {facts.feature_mix && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <BarChart3 className="size-4 text-primary" />
-                                    <h3 className="text-sm font-semibold uppercase tracking-wide">Feature Mix</h3>
+                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
+                                <div className="flex items-center gap-2.5 mb-5">
+                                    <BarChart3 className="size-5 text-primary" />
+                                    <h3 className="text-base font-semibold uppercase tracking-wide">Feature Mix</h3>
                                 </div>
-                                <div className="space-y-2 text-sm font-mono">
+                                <div className="space-y-3 text-base font-mono">
                                     <Fact label="Type" value={safe(facts.feature_mix.type)} />
                                     <Fact label="Numeric" value={facts.feature_mix.numeric_ratio != null ? `${(facts.feature_mix.numeric_ratio * 100).toFixed(0)}%` : "N/A"} />
                                     <Fact label="Categorical" value={facts.feature_mix.categorical_ratio != null ? `${(facts.feature_mix.categorical_ratio * 100).toFixed(0)}%` : "N/A"} />
@@ -195,12 +195,12 @@ export default function Layer1ReportPage() {
                 {/* ══════ 4. Critical Risks ══════ */}
                 {criticalRisks.length > 0 && (
                     <div>
-                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <ShieldAlert className="size-5 text-red-400" />
+                        <h3 className="text-xl font-semibold mb-5 flex items-center gap-2.5">
+                            <ShieldAlert className="size-6 text-red-400" />
                             Critical Risks
-                            <span className="text-xs font-mono bg-red-500/15 text-red-400 px-2 py-0.5 rounded-full ml-1">{criticalRisks.length}</span>
+                            <span className="text-sm font-mono bg-red-500/15 text-red-400 px-2.5 py-0.5 rounded-full ml-1">{criticalRisks.length}</span>
                         </h3>
-                        <div className="grid gap-4">
+                        <div className="grid gap-5">
                             {criticalRisks.map((risk, i) => (
                                 <RiskCard key={risk.id ?? i} risk={risk} severity="critical" />
                             ))}
@@ -211,10 +211,10 @@ export default function Layer1ReportPage() {
                 {/* ══════ 5. Warning Risks ══════ */}
                 {warningRisks.length > 0 && (
                     <div>
-                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <AlertTriangle className="size-5 text-amber-400" />
+                        <h3 className="text-xl font-semibold mb-5 flex items-center gap-2.5">
+                            <AlertTriangle className="size-6 text-amber-400" />
                             Warning Risks
-                            <span className="text-xs font-mono bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full ml-1">{warningRisks.length}</span>
+                            <span className="text-sm font-mono bg-amber-500/15 text-amber-400 px-2.5 py-0.5 rounded-full ml-1">{warningRisks.length}</span>
                         </h3>
                         <div className="grid gap-4">
                             {warningRisks.map((risk, i) => (
@@ -229,22 +229,22 @@ export default function Layer1ReportPage() {
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
                         <button
                             onClick={() => setPassedOpen(!passedOpen)}
-                            className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-emerald-500/5 transition-colors cursor-pointer"
+                            className="w-full flex items-center justify-between px-7 py-5 text-left hover:bg-emerald-500/5 transition-colors cursor-pointer"
                         >
-                            <span className="flex items-center gap-2 text-sm font-semibold">
-                                <ShieldCheck className="size-4 text-emerald-400" />
+                            <span className="flex items-center gap-2.5 text-base font-semibold">
+                                <ShieldCheck className="size-5 text-emerald-400" />
                                 Passed Checks ({noIssues.length})
                             </span>
-                            <ChevronDown className={`size-4 text-emerald-400 transition-transform duration-200 ${passedOpen ? "rotate-180" : ""}`} />
+                            <ChevronDown className={`size-5 text-emerald-400 transition-transform duration-200 ${passedOpen ? "rotate-180" : ""}`} />
                         </button>
                         {passedOpen && (
-                            <div className="px-6 pb-4 space-y-3">
+                            <div className="px-7 pb-5 space-y-3">
                                 {noIssues.map((item, i) => (
-                                    <div key={item.id ?? i} className="flex items-start gap-3 py-2 border-t border-emerald-500/10 first:border-0">
-                                        <div className="size-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                                    <div key={item.id ?? i} className="flex items-start gap-3 py-2.5 border-t border-emerald-500/10 first:border-0">
+                                        <div className="size-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                                         <div>
-                                            <p className="text-sm font-medium">{safe(item.check_name)}</p>
-                                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{safe(item.title)}</p>
+                                            <p className="text-base font-medium">{safe(item.check_name)}</p>
+                                            <p className="text-sm text-muted-foreground font-mono mt-0.5">{safe(item.title)}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -264,9 +264,9 @@ export default function Layer1ReportPage() {
 
 function SummaryCard({ label, value, accent }: { label: string; value: string; accent: string }) {
     return (
-        <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-5 text-center">
-            <p className={`text-3xl font-bold ${accent}`}>{value}</p>
-            <p className="text-xs font-mono uppercase tracking-wide text-muted-foreground mt-1">{label}</p>
+        <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6 text-center">
+            <p className={`text-4xl font-bold ${accent}`}>{value}</p>
+            <p className="text-sm font-mono uppercase tracking-wide text-muted-foreground mt-1.5">{label}</p>
         </div>
     );
 }
@@ -291,25 +291,25 @@ function RiskCard({ risk, severity }: { risk: Layer1RiskItem; severity: "critica
         v !== null && v !== undefined && v !== "" ? String(v) : fb;
 
     return (
-        <div className={`rounded-xl border ${borderColor} ${bgColor} p-5`}>
+        <div className={`rounded-xl border ${borderColor} ${bgColor} p-6`}>
             <div className="flex items-start justify-between gap-4 mb-3">
                 <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-sm">{safe(risk.title)}</h4>
-                    <p className="text-xs text-muted-foreground font-mono mt-1">{safe(risk.check_name)}</p>
+                    <h4 className="font-semibold text-base">{safe(risk.title)}</h4>
+                    <p className="text-sm text-muted-foreground font-mono mt-1">{safe(risk.check_name)}</p>
                 </div>
-                <span className={`text-xs font-mono px-2 py-0.5 rounded-full shrink-0 ${badgeBg} ${accentText}`}>
+                <span className={`text-sm font-mono px-2.5 py-1 rounded-full shrink-0 ${badgeBg} ${accentText}`}>
                     {safe(risk.scope)}
                 </span>
             </div>
 
-            <div className="flex flex-wrap gap-4 text-xs font-mono text-muted-foreground">
+            <div className="flex flex-wrap gap-4 text-sm font-mono text-muted-foreground">
                 <span>Metric: <span className={`font-medium ${accentText}`}>{safe(risk.metric)}</span></span>
                 {risk.risk_code && <span>Code: {risk.risk_code}</span>}
             </div>
 
             {/* Details from info */}
             {typeof risk.info?.details === "string" ? (
-                <p className="mt-3 text-xs text-muted-foreground border-t border-white/5 pt-3">
+                <p className="mt-3 text-sm text-muted-foreground border-t border-white/5 pt-3">
                     {risk.info.details}
                 </p>
             ) : null}
@@ -317,10 +317,10 @@ function RiskCard({ risk, severity }: { risk: Layer1RiskItem; severity: "critica
             {/* Affected columns */}
             {risk.columns && risk.columns.length > 0 && (
                 <div className="mt-3 border-t border-white/5 pt-3">
-                    <p className="text-xs text-muted-foreground mb-1.5">Affected Columns:</p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <p className="text-sm text-muted-foreground mb-2">Affected Columns:</p>
+                    <div className="flex flex-wrap gap-2">
                         {risk.columns.map((col) => (
-                            <span key={col} className={`text-xs font-mono px-2 py-0.5 rounded ${badgeBg} ${accentText}`}>
+                            <span key={col} className={`text-sm font-mono px-2.5 py-1 rounded ${badgeBg} ${accentText}`}>
                                 {col}
                             </span>
                         ))}
@@ -331,10 +331,10 @@ function RiskCard({ risk, severity }: { risk: Layer1RiskItem; severity: "critica
             {/* Detected placeholders */}
             {risk.detected_placeholders && risk.detected_placeholders.length > 0 && (
                 <div className="mt-3 border-t border-white/5 pt-3">
-                    <p className="text-xs text-muted-foreground mb-1.5">Detected Placeholders:</p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <p className="text-sm text-muted-foreground mb-2">Detected Placeholders:</p>
+                    <div className="flex flex-wrap gap-2">
                         {risk.detected_placeholders.map((ph) => (
-                            <span key={ph} className={`text-xs font-mono px-2 py-0.5 rounded ${badgeBg} ${accentText}`}>
+                            <span key={ph} className={`text-sm font-mono px-2.5 py-1 rounded ${badgeBg} ${accentText}`}>
                                 {`"${ph}"`}
                             </span>
                         ))}
