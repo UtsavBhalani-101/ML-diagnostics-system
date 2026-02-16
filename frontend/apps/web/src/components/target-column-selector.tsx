@@ -127,16 +127,16 @@ export default function TargetColumnSelector() {
                         onClick={() => setIsOpen(!isOpen)}
                         disabled={targetConfirmed}
                         className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-200 cursor-pointer ${targetConfirmed
-                                ? "border-emerald-500/30 bg-emerald-500/5"
-                                : isOpen
-                                    ? "border-primary/50 bg-primary/5 ring-2 ring-primary/20"
-                                    : "border-border bg-secondary/30 hover:border-primary/30 hover:bg-secondary/50"
+                            ? "border-emerald-500/30 bg-emerald-500/5"
+                            : isOpen
+                                ? "border-primary/50 bg-primary/5 ring-2 ring-primary/20"
+                                : "border-border bg-secondary/30 hover:border-primary/30 hover:bg-secondary/50"
                             }`}
                     >
                         <span
                             className={`text-sm font-mono truncate ${selectedTarget
-                                    ? "text-foreground font-medium"
-                                    : "text-muted-foreground"
+                                ? "text-foreground font-medium"
+                                : "text-muted-foreground"
                                 }`}
                         >
                             {selectedTarget || "Select a column…"}
@@ -184,7 +184,7 @@ export default function TargetColumnSelector() {
                                 </div>
                             )}
 
-                            <div className="max-h-52 overflow-y-auto">
+                            <div className="max-h-64 overflow-y-auto">
                                 {filteredColumns.length === 0 ? (
                                     <div className="px-4 py-3 text-sm text-muted-foreground font-mono">
                                         No columns match "{searchQuery}"
@@ -196,8 +196,8 @@ export default function TargetColumnSelector() {
                                             type="button"
                                             onClick={() => handleSelect(col)}
                                             className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm font-mono transition-colors duration-100 cursor-pointer ${selectedTarget === col
-                                                    ? "bg-primary/10 text-primary"
-                                                    : "text-foreground hover:bg-secondary/60"
+                                                ? "bg-primary/10 text-primary"
+                                                : "text-foreground hover:bg-secondary/60"
                                                 }`}
                                         >
                                             <span className="truncate">{col}</span>
@@ -236,8 +236,8 @@ export default function TargetColumnSelector() {
                         onClick={handleConfirm}
                         disabled={!selectedTarget || confirming}
                         className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${!selectedTarget || confirming
-                                ? "bg-secondary/50 text-muted-foreground cursor-not-allowed"
-                                : "bg-primary text-white hover:bg-primary/90 shadow-sm"
+                            ? "bg-secondary/50 text-muted-foreground cursor-not-allowed"
+                            : "bg-primary text-white hover:bg-primary/90 shadow-sm"
                             }`}
                     >
                         {confirming ? (
