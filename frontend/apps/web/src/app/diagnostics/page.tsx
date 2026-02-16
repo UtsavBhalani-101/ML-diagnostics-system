@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { Activity, Play, ArrowRight } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import FileUpload from "@/components/file-upload";
+import TargetColumnSelector from "@/components/target-column-selector";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { runAnalysis } from "@/lib/api";
@@ -20,13 +21,14 @@ export default function DiagnosticsPage() {
     const uploadedFile = useDiagnosticsStore((s) => s.uploadedFile);
     const validationError = useDiagnosticsStore((s) => s.validationError);
     const analysisError = useDiagnosticsStore((s) => s.analysisError);
+    const selectedTarget = useDiagnosticsStore((s) => s.selectedTarget);
+    const targetConfirmed = useDiagnosticsStore((s) => s.targetConfirmed);
 
     const setState = useDiagnosticsStore((s) => s.setState);
     const setUploadedFile = useDiagnosticsStore((s) => s.setUploadedFile);
     const setValidationError = useDiagnosticsStore((s) => s.setValidationError);
     const setAnalysisResult = useDiagnosticsStore((s) => s.setAnalysisResult);
     const setAnalysisError = useDiagnosticsStore((s) => s.setAnalysisError);
-    const setFileUploadInfo = useDiagnosticsStore((s) => s.setFileUploadInfo);
     const resetAll = useDiagnosticsStore((s) => s.resetAll);
 
     const handleFileValidated = (response: FileValidationResponse) => {
@@ -59,6 +61,17 @@ export default function DiagnosticsPage() {
         }
     };
 
+    // Show the target column selector when file is uploaded (or beyond)
+    const showTargetSelector =
+        state === "file-uploaded" ||
+        state === "target-selected" ||
+        state === "running" ||
+        state === "complete";
+
+    // Show the Run Analysis button only when target is confirmed
+    const showRunButton =
+        (state === "target-selected" || state === "running") && targetConfirmed;
+
     return (
         <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
             {/* Grid Pattern Background */}
@@ -89,11 +102,18 @@ export default function DiagnosticsPage() {
                                 message="Awaiting File Upload"
                             />
                         )}
-                        {(state === "file-uploaded") && uploadedFile && (
+                        {state === "file-uploaded" && uploadedFile && (
                             <StatusBadge
-                                key="success"
+                                key="file-uploaded"
                                 status="success"
                                 message={`File Validated: ${uploadedFile.filename}`}
+                            />
+                        )}
+                        {state === "target-selected" && selectedTarget && (
+                            <StatusBadge
+                                key="target-selected"
+                                status="success"
+                                message={`Target: ${selectedTarget} — Ready to Analyze`}
                             />
                         )}
                         {state === "running" && (
@@ -123,8 +143,11 @@ export default function DiagnosticsPage() {
                 {/* File Upload Component */}
                 <FileUpload onFileValidated={handleFileValidated} onReset={handleUploadReset} />
 
-                {/* Run Analysis Button - Show when file is uploaded but not yet analyzed */}
-                {(state === "file-uploaded" || state === "running") && (
+                {/* Target Column Selector - Show after file is uploaded */}
+                {showTargetSelector && <TargetColumnSelector />}
+
+                {/* Run Analysis Button - Show when target is confirmed */}
+                {showRunButton && (
                     <div className="mt-8 flex flex-col items-center gap-4">
                         <Button
                             size="lg"
