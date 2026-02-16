@@ -13,6 +13,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { validateFile, FileValidationResponse } from "@/lib/api";
+import { useDiagnosticsStore } from "@/lib/diagnostics-store";
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
 
@@ -22,13 +23,25 @@ interface FileUploadProps {
 }
 
 export default function FileUpload({ onFileValidated, onReset }: FileUploadProps) {
-    const [status, setStatus] = useState<UploadStatus>("idle");
+    // ── Read persisted state from global store to initialize ──
+    const storedStatus = useDiagnosticsStore((s) => s.fileUploadStatus);
+    const storedFileName = useDiagnosticsStore((s) => s.fileName);
+    const storedFileSize = useDiagnosticsStore((s) => s.fileSize);
+    const storedExtension = useDiagnosticsStore((s) => s.fileExtension);
+    const setFileUploadInfo = useDiagnosticsStore((s) => s.setFileUploadInfo);
+
+    // Initialize local state from the store (persists across navigations)
+    const [status, setStatus] = useState<UploadStatus>(storedStatus);
     const [isDragging, setIsDragging] = useState(false);
-    const [fileName, setFileName] = useState<string>("");
-    const [fileSize, setFileSize] = useState<number>(0);
-    const [progress, setProgress] = useState(0);
+    const [fileName, setFileName] = useState<string>(storedFileName);
+    const [fileSize, setFileSize] = useState<number>(storedFileSize);
+    const [progress, setProgress] = useState(storedStatus === "success" ? 100 : 0);
     const [errorMessage, setErrorMessage] = useState<string>("");
-    const [validationResponse, setValidationResponse] = useState<FileValidationResponse | null>(null);
+    const [validationResponse, setValidationResponse] = useState<FileValidationResponse | null>(
+        storedStatus === "success"
+            ? { is_valid: true, filename: storedFileName, extension: storedExtension, saved: true, error: null }
+            : null
+    );
     const inputRef = useRef<HTMLInputElement>(null);
 
     const formatFileSize = (bytes: number): string => {
@@ -70,6 +83,13 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
 
             if (response.is_valid) {
                 setStatus("success");
+                // Persist to global store
+                setFileUploadInfo({
+                    status: "success",
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileExtension: response.extension,
+                });
                 // Haptic feedback on success
                 if (navigator.vibrate) {
                     navigator.vibrate(100);
@@ -77,12 +97,24 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
             } else {
                 setStatus("error");
                 setErrorMessage(response.error || "File validation failed. Please upload a valid dataset file.");
+                setFileUploadInfo({
+                    status: "error",
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileExtension: "",
+                });
             }
         } catch (error) {
             clearInterval(progressInterval);
             setProgress(100);
             setStatus("error");
             setErrorMessage(error instanceof Error ? error.message : "Upload failed. Please try again.");
+            setFileUploadInfo({
+                status: "error",
+                fileName: file.name,
+                fileSize: file.size,
+                fileExtension: "",
+            });
         }
     };
 
@@ -96,6 +128,13 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
         if (inputRef.current) {
             inputRef.current.value = "";
         }
+        // Clear global store
+        setFileUploadInfo({
+            status: "idle",
+            fileName: "",
+            fileSize: 0,
+            fileExtension: "",
+        });
         if (onReset) {
             onReset();
         }
