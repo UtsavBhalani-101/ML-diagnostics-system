@@ -34,19 +34,17 @@ def duplicated_ratio(df: pd.DataFrame):
     }
 
 
-def constant_columns(df: pd.DataFrame):
+def constant_columns(df: pd.DataFrame): 
     constant_cols = df.columns[df.nunique(dropna=False) <= 1]
 
     return {
         "constant_columns": list(constant_cols),
         "constant_ratio": float(len(constant_cols) / df.shape[1])
-    }
+    }    
 
 
 def hidden_missing_ratio(df: pd.DataFrame):
-
     tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
-
     hidden_counts = {}
 
     for col in df.select_dtypes(include="object"):
