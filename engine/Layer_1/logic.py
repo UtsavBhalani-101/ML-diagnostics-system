@@ -1,344 +1,228 @@
-import pandas as pd
 import numpy as np
-from engine.Layer_1.risk_template import add_verdicts_to_tests
+import pandas as pd
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
+# * the signals coming are raw data, can't be used directly for decision making
+# * and some signals are column level, each col have different signal -- for layer 1 we detect structural issues
+# * structural issues are global level 
+# * so for multiple signals - aggregated (combined to one value) and then decided 
+# * signal -> aggregate (if needed) -> decision -> result
 
-#^ key facts - dimensions
-def extract_dataset_dimensions(signals: dict) -> dict:
-    rows = signals["Metadata"]["Rows"]
-    cols = signals["Metadata"]["Columns"]
+@dataclass
+class TestResult:
+    test: str
+    status: str
+    message: str
+    affected_columns: Optional[List[str]] = None
+    metrics: Optional[Dict] = None
 
-    return {
-        "rows": rows,
-        "columns": cols,
-        "shape": f"{rows} x {cols}",
-        "scale_class": (
-            "small" if rows < 1_000 else
-            "medium" if rows < 100_000 else
-            "large"
-        )
-    }
-
-
-#^ key facts - memory 
-def extract_memory_footprint(signals: dict) -> dict:
-    memory_mb = signals["Metadata"]["Memory (MB)"]
-
-    return {
-        "memory_mb": round(memory_mb, 3),
-        "memory_class": (
-            "light" if memory_mb < 10 else
-            "moderate" if memory_mb < 500 else
-            "heavy"
-        )
-    }
-
-
-#^ key facts - feature mix
-def extract_feature_mix(signal_output: dict):
-    """
-    Extract feature mix information from signal output.
+def validate_data(signals: dict):
+    if not isinstance(signals, dict):
+        raise ValueError("The data is not in Dict")
     
-    Args:
-        signal_output: Dictionary containing metadata from signals.run_signals_extraction()
+    items = ["rows", "cols", "global_missing_ratio", "column_missing_ratio", "duplicate_ratio", "constant_columns",
+             "constant_ratio", "hidden_missing_ratio", "mixed_type_columns", "mixed_ratio"]
+
+    for item in items:
+        if item not in signals:
+            raise ValueError("The data is corrupted")
         
-    Returns:
-        Dictionary with mix_type, num_ratio, and cat_ratio
-    """
-    # Access metadata from signal_output (NOT a DataFrame)
-    metadata = signal_output.get('Metadata', {})
-    num_ratio = metadata.get('Numerical Columns Ratio', 0.0)
-    cat_ratio = metadata.get('Valid Categorical Columns Ratio', 0.0)
     
-    mix_type = ""
+def test_dataset_size(signals: dict):
+    """Check whether dataset size is structurally adequate."""
 
-    if cat_ratio >= 0.55:
-        mix_type = "Categorical Dominant (High Complexity)"
+    rows = signals["rows"]
+    cols = signals["cols"]
 
-    elif 0.40 <= cat_ratio < 0.55:
-        mix_type = "Moderate Mix (Leaning Categorical)"
+    if rows < cols:
+        status = "WARNING"
+        message = "Dataset has fewer rows than columns; high dimensional structure may cause unstable analysis."
 
-    elif abs(num_ratio - cat_ratio) <= 0.10:
-        mix_type = "Balanced Mix"
+    elif rows < 50:
+        status = "CRITICAL"
+        message = "Dataset contains extremely few samples; structural reliability is very low."
 
-    elif num_ratio >= 0.70:
-        mix_type = "Numerical Dominant (Low Complexity)"
-
-    elif 0.60 <= num_ratio < 0.70:
-        mix_type = "Moderate Mix (Leaning Numerical)"
+    elif rows < 500:
+        status = "WARNING"
+        message = "Dataset has relatively few samples; statistical estimates may be unstable."
 
     else:
-        mix_type = "Unclear Mix"
+        status = "SAFE"
+        message = "Dataset size appears structurally adequate."
 
-    return {
-        "mix_type": mix_type,
-        "num_ratio": round(num_ratio, 3),
-        "cat_ratio": round(cat_ratio, 3)
-    }
+    return TestResult(
+        test="dataset_size",
+        status=status,
+        message=message,
+        affected_columns=None,
+        metrics={"rows": rows}
+    )
+        
 
-#^ checking missingness
-def analyze_missingness(df: pd.DataFrame, signal_output: dict, critical_threshold=0.30):
-    # Get the global ratio from signal_output
-    global_missing = signal_output['Health Check']['missing_ratio']
+def test_global_missing(signals: dict):
+    ratio = signals['global_missing_ratio']
+    percent = ratio * 100
     
-    # Calculate per-column missingness using the raw DF passed by the runner
-    col_missing_ratios = df.isnull().mean()
-    critical_cols = col_missing_ratios[col_missing_ratios > critical_threshold].index.tolist()
-    critical_count = len(critical_cols)
-    
-    tests = {}
-    
-    # Check 1: General volume
-    if global_missing < 0.05:
-        status_vol = "SAFE"
-    elif global_missing < 0.15:
-        status_vol = "WARNING"
+    if percent <= 5:
+        status = "SAFE"
+        message = "Dataset's missingness can be fixed with imputation"
+    elif percent <= 15:
+        status = "WARNING"
+        message = "Dataset's has moderate missingness, imputation may be unreliable"
     else:
-        status_vol = "DANGER"
-
-    tests["dataset_missing_ratio"] = {
-        "check_id": "dataset_missing_ratio",
-        "metric": round(global_missing, 4),
-        "status": status_vol,
-        "risk_code": "MISSINGNESS",
-        "scope": "DATASET"
-    }
-
-    # Check 2: Structural holes
-    tests["dataset_structural_missingness"] = {
-        "check_id": "dataset_structural_missingness",
-        "metric": critical_count,
-        "status": "DANGER" if critical_count > 0 else "SAFE",
-        "risk_code" : "STRUCTURAL_MISSINGNESS",
-        "scope" : "DATASET"
-    }
-    
-    # Check 3: Semantic Missing Values (Hidden Missing)
-    # List of common placeholders
-    semantic_placeholders = ["?", "NA", "na", "null", "NULL", "None", "none", "", " "]
-    
-    # Check object columns only for efficiency
-    obj_cols = df.select_dtypes(include=['object', 'category'])
-    semantic_missing_found = False
-    total_semantic_missing = 0
-    detected_placeholders = []
-    
-    if not obj_cols.empty:
-        # Check which placeholders are actually present
-        for placeholder in semantic_placeholders:
-            mask = obj_cols.isin([placeholder])
-            count = mask.sum().sum()
-            if count > 0:
-                detected_placeholders.append(placeholder if placeholder.strip() else repr(placeholder))
+        status = "CRITICAL"
+        message = "Dataset missingness is extreme, statistical measurements are unreliable"
         
-        # Get total count
-        mask = obj_cols.isin(semantic_placeholders)
-        total_semantic_missing = mask.sum().sum()
+    return TestResult(
+        test="global_missing",
+        status=status,
+        message=message,
+        affected_columns=None,
+        metrics={"global_missing_ratio" : ratio}
+    )
+
+
+def test_column_missing(signals : dict):
+    data = signals['column_missing_ratio']
+    
+    if len(data) != 0:
+    
+        max_missing = max(data.values())
+        col = next((k for k, v in data.items() if v == max_missing), None)
         
-        if total_semantic_missing > 0:
-            semantic_missing_found = True
+        percent = max_missing * 100
+        
+        if percent <= 5:
+            status = "SAFE"
+            message = "Column missingness is low, can be fixed with imputation"
+                    
+        elif percent <= 15:
+            status = "WARNING"
+            message = "Column missingness is moderate, only imputation would be unreliable"
+            
+        else:
+            status = "CRITICAL"
+            message = "Column missingness is high, statistical metrics are unreliable"
+            
+    return TestResult(
+        test="column_missing",
+        status=status,
+        message=message,
+        affected_columns=col,
+        metrics={"column_missing_ratio" : max_missing}
+    )
 
-    tests["dataset_hidden_missing_values"] = {
-        "check_id": "dataset_hidden_missing_values",
-        "status": "DANGER" if semantic_missing_found else "SAFE",
-        "metric": total_semantic_missing,
-        "info": {
-            "semantic_missing_detected": semantic_missing_found, 
-            "details": f"Found {total_semantic_missing} hidden missing values" if semantic_missing_found else "None"
-        },
-        "detected_placeholders": detected_placeholders if semantic_missing_found else [],
-        "risk_code": "HIDDEN_MISSING",
-        "scope": "DATASET"
-    }
-
-    return tests
+def test_duplicates(signals : dict):
+    ratio = signals["duplicate_ratio"]
+    percent = ratio * 100
+    
+    if percent <= 1:
+        status = "SAFE"
+        message = "Dataset's duplicates can be safely removed without too much data loss"
+    elif percent <= 5:
+        status = "WARNING"
+        message = "Dataset's has moderate duplicates, removing may thin the data"
+    else:
+        status = "CRITICAL"
+        message = "Dataset duplicates is extreme, removing will reduce significant portion of data"
+        
+    return TestResult(
+        test="duplicates",
+        status=status,
+        message=message,
+        affected_columns=None,
+        metrics={"duplicates_ratio" : ratio}
+    )
    
-#^ checking duplicates  
-def analyze_duplicates(signal_output:dict):
-    duplicates_ratio = signal_output['Health Check']['duplicated_ratio']
+def test_constant_columns(signals : dict):
+    cols = signals["constant_columns"]
+    ratio = signals["constant_ratio"]
     
-    tests = {}
-    
-    if duplicates_ratio < 0.005:
-        status = "SAFE"
-    elif duplicates_ratio < 0.02:
-        status = "WARNING"
-    else:
-        status = "DANGER"
-    
-    tests["dataset_duplicates_ratio"] = {
-        "check_id": "dataset_duplicates_ratio",
-        "metric" : duplicates_ratio,
-        "status": status,
-        "risk_code" : "DUPLICATION",
-        "scope" : "DATASET"
-    }
-    
-    return tests
-
-#^ checking constant 
-def analyze_constant_features(df: pd.DataFrame, signal_output: dict):
-    max_constant = signal_output["Health Check"]["constant_ratio"]["max_ratio"]
-
-    tests = {}
-    
-    # Find columns with near-constant values (threshold: 0.90)
-    flagged_columns = []
-    warning_threshold = 0.90
-    danger_threshold = 0.95
-    
-    for col in df.columns:
-        s = df[col].dropna()
-        if s.empty:
-            continue
-        ratio = s.value_counts(normalize=True).iloc[0]
-        if ratio >= warning_threshold:
-            flagged_columns.append(col)
-
-    # A4b: Presence of degenerate features
-    if max_constant < 0.90:
-        status_local = "SAFE"
-    elif max_constant < 0.95:
-        status_local = "WARNING"
-    else:
-        status_local = "DANGER"
-
-    tests["column_max_constant_ratio"] = {
-        "check_id": "column_max_constant_ratio",
-        "metric": max_constant,
-        "status": status_local,
-        "risk_code": "DEGENERACY",
-        "scope": "COLUMN",
-        "column": flagged_columns
-    }
-
-    return tests
-
-#^ checking cardinality
-def analyze_cardinality(signal_output: dict):
-    cardinality_ratio = signal_output["Complexity profile"]["Cardinality"]
-    
-    tests = {}
-    
-
-    if cardinality_ratio <= 0.10:
-        status = "SAFE"
-    elif cardinality_ratio <= 0.50:
-        status = "WARNING"
-    else:
-        status = "DANGER"
+    if ratio != 0:
+        percent = ratio * 100
         
-    
-    tests["dataset_cardinality_ratio"] = {
-        "check_id": "dataset_cardinality_ratio",
-        "metric": cardinality_ratio,
-        "status": status,
-        "risk_code": "CARDINALITY_EXPLOSION",
-        "scope": "DATASET"
-    }
-    
-    return tests
-
-#^ checking multicollinearity
-def analyze_multicollinearity(signal_output: dict):
-    ratio = signal_output["Complexity profile"]["Multicollinearity"]
-    
-    if ratio <= 0.02:
-        status = "SAFE"
-    elif ratio <= 0.10:
-        status = "WARNING"
+        if percent > 30:
+            status = "CRITICAL"
+            message = "Constant cols exists, "
+        elif percent > 0:
+            status = "WARNING"
+            message = "Constant cols exists, "
+            
     else:
-        status = "DANGER"
-    
-    tests = {}
-    tests["dataset_multicollinearity_density"] = {
-        "check_id": "dataset_multicollinearity_density",
-        "metric": ratio, 
-        "status": status,
-        "risk_code": "MULTICOLLINEARITY",
-        "scope": "DATASET"
-    }
-    
-    return tests
-
-#^ detecting outliers
-def analyze_outliers(signal_output: dict):
-    ratio = signal_output["Complexity profile"]["Outliers"]
-    
-    if ratio <= 0.05:
         status = "SAFE"
-    elif ratio <= 0.15:
-        status = "WARNING"
-    else:
-        status = "DANGER"
+        message = "No constant columns detected"
     
-    tests = {}
-    tests["dataset_outlier_ratio"] = {
-        "check_id": "dataset_outlier_ratio",
-        "metric": ratio,
-        "status": status,
-        "risk_code": "OUTLIER_SENSITIVITY",
-        "scope": "DATASET"
-    }
-    
-    return tests
+    return TestResult(
+        test="constant_columns",
+        status=status,
+        message=message,
+        affected_columns=[cols],
+        metrics={"constant_columns_ratio" : ratio}
+    )
 
-#^ checking mixed
-def analyze_mixed(signal_output: dict):
-    ratio = signal_output["Complexity profile"]["Mixed"]
+def test_mixed_columns(signals : dict):
+    cols = signals["mixed_type_columns"]
+    ratio = signals["mixed_ratio"]
+
+    if ratio != 0:
+        percent = ratio * 100
+        
+        if percent > 20:
+            status = "CRITICAL"
+            message = "Mixed cols exists, "
+        elif percent > 0:
+            status = "WARNING"
+            message = "Mixed cols exists, "
     
-    if ratio == 0.0:
+    return TestResult(
+        test="mixed_column",
+        status=status,
+        message=message,
+        affected_columns=[cols],
+        metrics={"mixed_column_ratio" : ratio}
+    )
+    
+    
+def test_hidden_missing(signals : dict):
+    data = signals["hidden_missing_ratio"]
+    
+    max_missing = max(data.values())
+    col = next((k for k, v in data.items() if v == max_missing), None)
+    
+    if max_missing != 0:
+        percent = max_missing * 100
+        
+        if percent > 20:
+            status = "CRITICAL"
+            message = "hidden missing values exists, "
+        elif percent > 0:
+            status = "WARNING"
+            message = "hidden missing values exists, "
+            
+    else:
         status = "SAFE"
-    else:
-        status = "DANGER"
+        message = "No hidden missing values detected"
+            
+    return TestResult(
+        test="hidden_missing",
+        status=status,
+        message=message,
+        affected_columns=col,
+        metrics={"hidden_missing_ratio" : max_missing}
+    )
+
+def main():
     
-    tests = {}
-    tests["dataset_mixed_type_ratio"] = {
-        "check_id": "dataset_mixed_type_ratio",
-        "metric" : ratio,
-        "status" : status,
-        "risk_code": "TYPE_AMBIGUITY",
-        "scope": "DATASET"
-    }
-    return tests
-
-#~ combined function 
-def run_logic_extraction(df: pd.DataFrame, signal_output: dict):
-    result = {
-        "facts": {},
-        "tests": {}
-    }
-
-    # Facts
-    result["facts"]["dimensions"] = extract_dataset_dimensions(signal_output)
-    result["facts"]["memory"] = extract_memory_footprint(signal_output)
-    result["facts"]["feature_mix"] = extract_feature_mix(signal_output)
-
-    # Logic checks (NO KEYS)
-    logic_functions = [
-        lambda: analyze_missingness(df, signal_output),
-        lambda: analyze_duplicates(signal_output),
-        lambda: analyze_constant_features(df, signal_output),
-        lambda: analyze_cardinality(signal_output),
-        lambda: analyze_multicollinearity(signal_output),
-        lambda: analyze_outliers(signal_output),
-        lambda: analyze_mixed(signal_output),
-    ]
-
-    for fn in logic_functions:
-        tests = fn()
-
-        # Merge tests (flat)
-        for k, v in tests.items():
-            if k in result["tests"]:
-                raise ValueError(f"Duplicate test ID: {k}")
-            result["tests"][k] = v
-
-    # Add verdicts to all tests based on risk_code and status
-    result["tests"] = add_verdicts_to_tests(result["tests"])
-
-    return result
-
-
+    validate_data(signals)
+    
+    print(test_dataset_size(signals))
+    print(test_global_missing(signals))
+    print(test_column_missing(signals))
+    print(test_duplicates(signals))
+    print(test_constant_columns(signals))
+    print(test_mixed_columns(signals))
+    print(test_hidden_missing(signals))
+    
 if __name__ == "__main__":
-    layer1_diagnostics()
+    main()

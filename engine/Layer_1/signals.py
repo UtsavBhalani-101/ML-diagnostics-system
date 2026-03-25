@@ -1,229 +1,98 @@
 import numpy as np
 import pandas as pd
 
-#& Helper function
-def classify_non_numeric(df):
-    n = len(df)
-    non_num_cols = df.select_dtypes(exclude=["number"]).columns
 
-    valid_categories = []
+def validate_data(df: pd.DataFrame):
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame")
 
-    for col in non_num_cols:
-        s = df[col].dropna().astype(str)
-        if s.empty:
-            continue
 
-        nunique = s.nunique()
-        unique_ratio = nunique / n if n else 0
+def dataset_shape(df: pd.DataFrame):
+    return {
+        "rows": int(df.shape[0]),
+        "cols": int(df.shape[1])
+    }
 
-        avg_len = s.str.len().mean()
-        max_len = s.str.len().max()
-        space_ratio = s.str.contains(" ").mean()
 
-        # Detect numeric-like object columns (dirty ingestion)
-        numeric_ratio = pd.to_numeric(s, errors="coerce").notna().mean()
-
-        # Reject ID-like columns
-        if unique_ratio > 0.8 and nunique > max(50, 0.1 * n):
-            continue
-
-        # Reject free text
-        if avg_len > 30 or max_len > 100 or space_ratio > 0.3:
-            continue
-
-        # Reject mixed numeric/string columns
-        if 0 < numeric_ratio < 1:
-            continue
-
-        valid_categories.append(col)
-
-    return valid_categories
-
-#^ Memory Usage
-def get_memory_usage(df: pd.DataFrame):
-    """
-    Calculate memory usage of the DataFrame.
-    Uses deep=True to get accurate memory for object (string) types.
-    Returns memory usage in MB.
-    """
-    usage_bytes = df.memory_usage(deep=True)
-    total_mb = usage_bytes.sum() / (1024 ** 2)
-    return round(total_mb, 4)
-
-#^ Metadata 
-def get_metadata(df):
-    rows, cols = df.shape
-
-    num_count = len(df.select_dtypes(include=["number"]).columns)
-    valid_cat_count = len(classify_non_numeric(df))
-    memory_mb = get_memory_usage(df)
+def global_missing_ratio(df: pd.DataFrame):
+    total_cells = df.shape[0] * df.shape[1]
 
     return {
-        "Rows": rows,
-        "Columns": cols,
-        "Numerical Columns Ratio": num_count / cols if cols else 0,
-        "Valid Categorical Columns Ratio": valid_cat_count / cols if cols else 0,
-        "Feature to Row Ratio": cols / rows if rows else 0,
-        "Memory (MB)": memory_mb
+        "global_missing_ratio": float(df.isna().sum().sum() / total_cells)
     }
-   
-#^ constant ratio  
-def get_global_constant_ratio(df: pd.DataFrame):
-    if df.empty:
-        return {"max_ratio": 0.0}
 
-    all_ratios = []
 
-    for col in df.columns:
-        s = df[col].dropna()
-        if s.empty:
-            continue
+def col_missing_ratio(df: pd.DataFrame):
+    return {
+        "column_missing_ratio": df.isna().mean().to_dict()
+    }
 
-        ratio = s.value_counts(normalize=True).iloc[0]
-        all_ratios.append(ratio)
 
-    if not all_ratios:
-        return {"max_ratio": 0.0}
-    
-    max_ratio = max(all_ratios)
+def duplicated_ratio(df: pd.DataFrame):
+    return {
+        "duplicate_ratio": float(df.duplicated().mean())
+    }
+
+
+def constant_columns(df: pd.DataFrame): 
+    constant_cols = df.columns[df.nunique(dropna=False) <= 1]
 
     return {
-        "max_ratio": round(max_ratio, 4),
-    }
-    
-    
-#^ Health Signals
-def get_health_signals(df: pd.DataFrame):
-    rows, cols = df.shape
+        "constant_columns": list(constant_cols),
+        "constant_ratio": float(len(constant_cols) / df.shape[1])
+    }    
 
-    missing_ratio = df.isnull().sum().sum() / df.size if df.size else 0.0
-    constant_ratio = get_global_constant_ratio(df)  # Now returns {"max_ratio": ...}
-    duplicated_ratio = df.duplicated().mean() if rows else 0.0
+
+def hidden_missing_ratio(df: pd.DataFrame):
+    tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
+    hidden_counts = {}
+
+    for col in df.select_dtypes(include="object"):
+        ratio = (
+            df[col]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .isin(tokens)
+            .mean()
+        )
+        hidden_counts[col] = float(ratio)
+
+    return {"hidden_missing_ratio": hidden_counts}
+
+
+def mixed_type_columns(df: pd.DataFrame):
+
+    mixed_cols = []
+
+    for col in df.select_dtypes(include="object"):
+
+        numeric_ratio = pd.to_numeric(df[col], errors="coerce").notna().mean()
+
+        if 0.7 < numeric_ratio < 1.0:
+            mixed_cols.append(col)
 
     return {
-        "missing_ratio": round(missing_ratio, 4),
-        "constant_ratio": constant_ratio,  # Nested dictionary with max_ratio
-        "duplicated_ratio": round(duplicated_ratio, 4),
+        "mixed_type_columns": mixed_cols,
+        "mixed_ratio": float(len(mixed_cols) / df.shape[1])
     }
 
-    
-#^ Multicollinearity
-def get_global_multicollinearity(df, threshold=0.8):
-    num_df = df.select_dtypes(include=["number"])
 
-    # Drop constant columns
-    num_df = num_df.loc[:, num_df.nunique() > 1]
+def run_signal_extraction(df: pd.DataFrame):
 
-    if num_df.shape[1] < 2:
-        return 0.0
+    validate_data(df)
 
-    corr = num_df.corr().abs()
-    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+    signals = {}
 
-    high_corr_pairs = (upper > threshold).sum().sum()
-    total_pairs = (num_df.shape[1] * (num_df.shape[1] - 1)) / 2
+    signals.update(dataset_shape(df))
+    signals.update(global_missing_ratio(df))
+    signals.update(col_missing_ratio(df))
+    signals.update(duplicated_ratio(df))
+    signals.update(constant_columns(df))
+    signals.update(hidden_missing_ratio(df))
+    signals.update(mixed_type_columns(df))
 
-    return round(high_corr_pairs / total_pairs, 4) if total_pairs else 0.0
-
-#^ Cardinality
-def get_global_cardinality(df, valid_cat_cols=None):
-    if valid_cat_cols is None:
-        valid_cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-
-    if not valid_cat_cols:
-        return 0.0
-
-    n = len(df)
-    ratios = [
-        df[col].nunique(dropna=True) / n
-        for col in valid_cat_cols
-        if n > 0
-    ]
-
-    return round(sum(ratios) / len(ratios), 4) if ratios else 0.0
-
-#^ Outliers
-def get_global_outlier_ratio(df, multiplier=1.5):
-    # 1. Select numeric features
-    num_df = df.select_dtypes(include=["number"])
-    
-    if num_df.empty or num_df.shape[1] == 0:
-        return 0.0
-    
-    # 2. Calculate IQR bounds per column
-    q1 = num_df.quantile(0.25)
-    q3 = num_df.quantile(0.75)
-    iqr = q3 - q1
-    
-    # 3. Define thresholds per column
-    lower = q1 - (multiplier * iqr)
-    upper = q3 + (multiplier * iqr)
-    
-    # 4. Create outlier mask (True = outlier)
-    outlier_mask = (num_df < lower) | (num_df > upper)
-    
-    # 5. Column-wise: Calculate outlier ratio for EACH column, then average
-    # This is more robust as each column contributes equally
-    column_outlier_ratios = outlier_mask.mean(axis=0)  # Fraction of outliers per column
-    
-    # 6. Average across all columns
-    return round(column_outlier_ratios.mean(), 4)
-
-#^ Mixed type ratio
-def get_global_mixed_type_ratio(df):
-    cols = df.select_dtypes(include=["object", "category"]).columns
-    if len(cols) == 0:
-        return 0.0
-
-    mixed_count = 0
-
-    for col in cols:
-        s = df[col].dropna()
-        if s.empty:
-            continue
-
-        # Numeric coercion test
-        coerced = pd.to_numeric(s, errors="coerce")
-        numeric_ratio = coerced.notna().mean()
-
-        # Mixed if partially numeric
-        if 0 < numeric_ratio < 1:
-            mixed_count += 1
-
-    return round(mixed_count / df.shape[1], 4)
-
-#^ Complexity Profile
-def get_complexity_profile(df: pd.DataFrame):
-    mlc = get_global_multicollinearity(df)
-    cardinal = get_global_cardinality(df)
-    outliers = get_global_outlier_ratio(df)
-    mixed = get_global_mixed_type_ratio(df)
-    
-    return{
-        "Multicollinearity":mlc,
-        "Cardinality": cardinal,
-        "Outliers": outliers,
-        "Mixed": mixed
-    }
-    
-def run_signals_extraction(df: pd.DataFrame):
-    """
-    The Orchestrator calls this function. 
-    It passes the DataFrame (features only).
-    This function distributes data to the helper functions.
-    
-    Args:
-        df: DataFrame containing features
-    
-    Returns:
-        Dictionary with extracted signals
-    """
-    final_result = {}
-    final_result['Metadata'] = get_metadata(df)
-    final_result['Health Check'] = get_health_signals(df)
-    final_result['Complexity profile'] = get_complexity_profile(df)
-    
-    return final_result
+    return signals
 
 if __name__ == "__main__":
-    run_signals_extraction()
+    run_signal_extraction(df)
