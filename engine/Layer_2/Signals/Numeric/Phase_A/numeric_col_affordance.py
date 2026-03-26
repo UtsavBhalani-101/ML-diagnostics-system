@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 
 @dataclass
-class TestResult:
+class Signals:
     pass
 
 def get_signals(col: pd.Series):
