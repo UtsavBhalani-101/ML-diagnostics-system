@@ -3,22 +3,34 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 
+
+
+# * states (immutable)
 @dataclass(frozen=True)
 class Signals:
-    cardinality_ratio: float
-    missing_ratio: float
-    dominance_ratio: float
-    gap_var: Optional[float]
-    gap_mean: Optional[float]
-    repeat_ratio: Optional[float]
+    cardinality_ratio: float = 0.0
+    missing_ratio: float = 0.0
+    dominance_ratio: float = 0.0
+    gap_var: Optional[float] = None
+    gap_mean: Optional[float] = None
+    repeat_ratio: Optional[float] = None
+    monotonicity: Optional[bool] = None
+    
 
 
+# ^ validate data
 def validate_data(col: pd.Series):
     if not isinstance(col, pd.Series):
         raise ValueError("Provided data is not a column")
+   
     
-
-def get_gap_signals(col: pd.Series) -> dict:
+    
+def get_monotonicity_signal(col: pd.Series):
+    return {"monotonicity": col.is_monotonic_increasing}
+    
+    
+    
+def get_gap_signal(col: pd.Series) -> dict:
     numeric_col = pd.to_numeric(col, errors="coerce").dropna()
     if len(numeric_col) < 5:
         return None
@@ -28,7 +40,9 @@ def get_gap_signals(col: pd.Series) -> dict:
         return None
     return {"gap_var": float(np.var(diffs)), "gap_mean": float(np.mean(diffs))}
 
-def get_repetation_signals(col)-> dict:
+
+
+def get_repetation_signal(col)-> dict:
     col = pd.to_numeric(col, errors="coerce").dropna()
     
     if len(col) < 5:
@@ -37,8 +51,10 @@ def get_repetation_signals(col)-> dict:
     # measure how often consecutive values repeat
     repeats = (col.values[1:] == col.values[:-1]).mean()
     
-    return repeats    
-    
+    return {"repeat_ratio": repeats}  
+
+
+
 def get_basic_signals(col: pd.Series)-> dict:
     col_str = col.astype(str).str.strip().str.lower()
     missing_tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", ""}
@@ -53,22 +69,33 @@ def get_basic_signals(col: pd.Series)-> dict:
         "missing_ratio": float(total_missing.mean()) if n else 1.0,
         "dominance_ratio": float(vc.iloc[0]) if len(vc) > 0 else 0.0,
     }
-    
+
+
+
+# * signal_registry
+SIGNAL_REGISTRY = [
+    get_basic_signals,
+    get_gap_signal,
+    get_repetation_signal,
+    get_monotonicity_signal
+]
+
+
+
+# ^ aggregation function  
 def build_signals(col: pd.Series) -> Signals:
-    basic = get_basic_signals(col)
-    repeat = get_repetation_signals(col)
-    gap = get_gap_signals(col) or {}
-    
-    return Signals(
-        cardinality_ratio=basic.get("cardinality_ratio"),
-        missing_ratio=basic.get("missing_ratio"),
-        dominance_ratio=basic.get("dominance_ratio"),
-        gap_var=gap.get("gap_var"),
-        gap_mean=gap.get("gap_mean"),
-        repeat_ratio=repeat
-    )
+    combined = {}
+
+    for fn in SIGNAL_REGISTRY:
+        result = fn(col)
+        if result:
+            combined.update(result)
+
+    return Signals(**combined)
 
 
+
+# ^ core logic
 def infer_column_type(signals: Signals):
     # signals
     mr = signals.missing_ratio
@@ -77,6 +104,7 @@ def infer_column_type(signals: Signals):
     gap_mean = signals.gap_mean
     gap_var = signals.gap_var
     rr = signals.repeat_ratio
+    mono = signals.monotonicity
 
     # invariants - sparse, degenerate, continuous_numeric, categorical_numeric, id_like
     is_sparse = mr >= 0.6
@@ -102,11 +130,13 @@ def infer_column_type(signals: Signals):
     return "continuous_numeric"
     
 
+
 def main():
     validate_data(col)
     signal_info = build_signals(col)
     infer_column_type(signal_info)
     
+
 
 if __name__ == "__main__":
     main()
