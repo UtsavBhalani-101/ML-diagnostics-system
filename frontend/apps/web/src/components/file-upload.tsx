@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, DragEvent, ChangeEvent } from "react";
+import { useState, useRef } from "react";
+import type { DragEvent, ChangeEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import {
@@ -12,7 +13,8 @@ import {
     RefreshCw,
     Trash2,
 } from "lucide-react";
-import { validateFile, FileValidationResponse } from "@/lib/api";
+import { validateFile } from "@/lib/api";
+import type { FileValidationResponse } from "@/lib/api";
 import { useDiagnosticsStore } from "@/lib/diagnostics-store";
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";

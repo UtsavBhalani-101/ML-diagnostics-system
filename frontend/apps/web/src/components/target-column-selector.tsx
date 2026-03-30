@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Target, ChevronDown, CheckCircle, Loader, Search } from "lucide-react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Target, ChevronDown, CheckCircle, Loader, Search, X } from "lucide-react";
 import { getDatasetColumns, setTargetColumn } from "@/lib/api";
 import { useDiagnosticsStore } from "@/lib/diagnostics-store";
 
@@ -22,6 +23,27 @@ export default function TargetColumnSelector() {
     const [confirming, setConfirming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Lock body scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            document.documentElement.style.overflow = "hidden";
+            document.body.style.overflow = "hidden";
+        } else {
+            document.documentElement.style.overflow = "";
+            document.body.style.overflow = "";
+        }
+        return () => {
+            document.documentElement.style.overflow = "";
+            document.body.style.overflow = "";
+        };
+    }, [isOpen]);
 
     // Fetch columns on mount if not already loaded
     useEffect(() => {
@@ -98,6 +120,7 @@ export default function TargetColumnSelector() {
     }
 
     return (
+        <>
         <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -120,17 +143,15 @@ export default function TargetColumnSelector() {
                     </div>
                 </div>
 
-                {/* Dropdown */}
-                <div className="relative mb-4">
+                {/* Dropdown Trigger */}
+                <div className="mb-6">
                     <button
                         type="button"
-                        onClick={() => setIsOpen(!isOpen)}
+                        onClick={() => setIsOpen(true)}
                         disabled={targetConfirmed}
                         className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-all duration-200 cursor-pointer ${targetConfirmed
                             ? "border-emerald-500/30 bg-emerald-500/5"
-                            : isOpen
-                                ? "border-primary/50 bg-primary/5 ring-2 ring-primary/20"
-                                : "border-border bg-secondary/30 hover:border-primary/30 hover:bg-secondary/50"
+                            : "border-border bg-secondary/30 hover:border-primary/30 hover:bg-secondary/50"
                             }`}
                     >
                         <span
@@ -150,73 +171,10 @@ export default function TargetColumnSelector() {
                             {targetConfirmed ? (
                                 <CheckCircle className="size-4 text-emerald-500" />
                             ) : (
-                                <ChevronDown
-                                    className={`size-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""
-                                        }`}
-                                />
+                                <ChevronDown className="size-4 text-muted-foreground" />
                             )}
                         </div>
                     </button>
-
-                    {/* Dropdown List */}
-                    {isOpen && !targetConfirmed && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -4, scale: 0.98 }}
-                            transition={{ duration: 0.15 }}
-                            className="absolute z-20 mt-2 w-full rounded-lg border border-border bg-card shadow-xl backdrop-blur-lg overflow-hidden"
-                        >
-                            {/* Search */}
-                            {columns.length > 8 && (
-                                <div className="p-2 border-b border-border">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search columns…"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-8 pr-3 py-2 text-sm font-mono bg-secondary/30 rounded-md border border-border focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground/50"
-                                            autoFocus
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="max-h-64 overflow-y-auto">
-                                {filteredColumns.length === 0 ? (
-                                    <div className="px-4 py-3 text-sm text-muted-foreground font-mono">
-                                        No columns match "{searchQuery}"
-                                    </div>
-                                ) : (
-                                    filteredColumns.map((col) => (
-                                        <button
-                                            key={col}
-                                            type="button"
-                                            onClick={() => handleSelect(col)}
-                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm font-mono transition-colors duration-100 cursor-pointer ${selectedTarget === col
-                                                ? "bg-primary/10 text-primary"
-                                                : "text-foreground hover:bg-secondary/60"
-                                                }`}
-                                        >
-                                            <span className="truncate">{col}</span>
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                {col === suggestedTarget && (
-                                                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary/70">
-                                                        suggested
-                                                    </span>
-                                                )}
-                                                {selectedTarget === col && (
-                                                    <CheckCircle className="size-3.5 text-primary" />
-                                                )}
-                                            </div>
-                                        </button>
-                                    ))
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
                 </div>
 
                 {/* Error */}
@@ -255,5 +213,91 @@ export default function TargetColumnSelector() {
                 )}
             </div>
         </motion.div>
+
+        {/* Modal Overlay */}
+        {/* Modal Overlay */}
+        {mounted && createPortal(
+            <AnimatePresence>
+                {isOpen && !targetConfirmed && (
+                    <div 
+                        className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+                        data-lenis-prevent="true"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            transition={{ duration: 0.2 }}
+                            className="w-full max-w-lg flex flex-col max-h-[85vh] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+                        >
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/30">
+                                <h3 className="font-semibold text-foreground">Select Target Column</h3>
+                                <button
+                                    onClick={() => setIsOpen(false)}
+                                    className="p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <X className="size-5" />
+                                </button>
+                            </div>
+
+                            {/* Search */}
+                            {columns.length > 8 && (
+                                <div className="p-3 border-b border-border bg-card">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search columns…"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full pl-9 pr-4 py-2 text-sm font-mono bg-secondary/30 rounded-lg border border-border focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground/50 transition-colors"
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Columns List */}
+                            <div className="flex-1 overflow-y-auto p-2 max-h-[60vh] min-h-[300px] overscroll-contain">
+                                {filteredColumns.length === 0 ? (
+                                    <div className="p-4 text-center text-sm text-muted-foreground font-mono">
+                                        No columns match "{searchQuery}"
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        {filteredColumns.map((col) => (
+                                            <button
+                                                key={col}
+                                                type="button"
+                                                onClick={() => handleSelect(col)}
+                                                className={`w-full flex items-center justify-between px-3 py-3 rounded-lg text-left text-sm font-mono transition-colors duration-150 cursor-pointer ${selectedTarget === col
+                                                    ? "bg-primary/10 text-primary font-medium border border-primary/20"
+                                                    : "text-foreground hover:bg-secondary/80 border border-transparent"
+                                                    }`}
+                                            >
+                                                <span className="truncate">{col}</span>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {col === suggestedTarget && (
+                                                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary/80 border border-primary/10">
+                                                            suggested
+                                                        </span>
+                                                    )}
+                                                    {selectedTarget === col && (
+                                                        <CheckCircle className="size-4 text-primary" />
+                                                    )}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>,
+            document.body
+        )}
+        </>
     );
 }

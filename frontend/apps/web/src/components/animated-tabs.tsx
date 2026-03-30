@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import type { Route } from "next";
 
 export interface AnimatedTabsProps {
     tabs: { label: string; href: string }[];
@@ -42,7 +43,7 @@ export function AnimatedTabs({ tabs }: AnimatedTabsProps) {
     }, [activeTab, pathname]);
 
     const handleTabClick = (href: string) => {
-        router.push(href);
+        router.push(href as Route);
     };
 
     return (

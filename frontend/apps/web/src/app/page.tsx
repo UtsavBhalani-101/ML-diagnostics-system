@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Hero } from "@/components/hero";
-import { getHomePage, getHealth, HomePageResponse } from "@/lib/api";
+import { getHomePage, getHealth, type HomePageResponse } from "@/lib/api";
 
 export default function Home() {
   const [apiStatus, setApiStatus] = useState<"loading" | "connected" | "disconnected">("loading");
