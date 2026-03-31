@@ -11,9 +11,11 @@ from typing import List, Optional, Dict
 
 @dataclass
 class TestResult:
-    test: str
-    status: str
-    message: str
+    dimension: str = "Data_integrity"
+    name: str = None
+    status: "SAFE" | "WARNING" | "CRITICAL"
+    reason: str = None
+    confidence: float | None
     affected_columns: Optional[List[str]] = None
     metrics: Optional[Dict] = None
 

@@ -1,5 +1,14 @@
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
+from typing import List, Optional, Dict
+
+@dataclass(frozen=True)
+class Structure:
+    dimension: str = "Data_integrity"
+    name: str = None
+    value: any = None
+    meta: dict = None
 
 
 def validate_data(df: pd.DataFrame):
