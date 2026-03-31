@@ -120,9 +120,12 @@ def variance_risk(signals):
 
 def task_uncertainty_risk(signals):
     conf = signals.get("task_confidence", 1.0)
+    risk = (1 - conf) ** 2
 
-    logger.info(f"Computing task_uncertainty_risk: {conf}")
-    return 1.0 - conf
+    if conf < 0.5:
+        risk += 0.3
+
+    return min(risk, 1.0)
 
 
 # ------------------ AGGREGATION ------------------
@@ -214,5 +217,3 @@ def run_target_viability(signals):
 
 if __name__ == "__main__":
     run_target_viability(signals)
-    
-    
