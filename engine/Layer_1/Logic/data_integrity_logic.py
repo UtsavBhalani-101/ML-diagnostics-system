@@ -1,230 +1,202 @@
 import numpy as np
-import pandas as pd
 from dataclasses import dataclass
-from typing import List, Optional, Dict
+import logging
+from typing import Dict, List, Optional
 
-# * the signals coming are raw data, can't be used directly for decision making
-# * and some signals are column level, each col have different signal -- for layer 1 we detect structural issues
-# * structural issues are global level 
-# * so for multiple signals - aggregated (combined to one value) and then decided 
-# * signal -> aggregate (if needed) -> decision -> result
+
+# ------------------ LOGGING ------------------
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger('ml_diag')
+
+
+# ------------------ STRUCTURE ------------------
 
 @dataclass
 class TestResult:
-    dimension: str = "Data_integrity"
-    name: str = None
-    status: "SAFE" | "WARNING" | "CRITICAL"
-    reason: str = None
-    confidence: float | None
+    dimension: str
+    name: str
+    status: str
+    reason: str
+    risk: float
     affected_columns: Optional[List[str]] = None
     metrics: Optional[Dict] = None
 
-def validate_data(signals: dict):
-    if not isinstance(signals, dict):
-        raise ValueError("The data is not in Dict")
+
+DIMENSION = "data_integrity"
+
+
+# ------------------ VALIDATION ------------------
+
+def validate_signals(signals: dict):
+    required = [
+        "rows", "cols",
+        "global_missing_ratio",
+        "column_missing_ratio",
+        "duplicate_ratio",
+        "constant_columns", "constant_ratio",
+        "hidden_missing_ratio",
+        "mixed_type_columns", "mixed_ratio"
+    ]
+
+    for key in required:
+        if key not in signals:
+            raise ValueError(f"Missing signal: {key}")
+
+
+# ------------------ RISK FUNCTIONS ------------------
+
+def missing_risk(signals):
+    ratio = signals["global_missing_ratio"]
     
-    items = ["rows", "cols", "global_missing_ratio", "column_missing_ratio", "duplicate_ratio", "constant_columns",
-             "constant_ratio", "hidden_missing_ratio", "mixed_type_columns", "mixed_ratio"]
-
-    for item in items:
-        if item not in signals:
-            raise ValueError("The data is corrupted")
-        
-    
-def test_dataset_size(signals: dict):
-    """Check whether dataset size is structurally adequate."""
-
-    rows = signals["rows"]
-    cols = signals["cols"]
-
-    if rows < cols:
-        status = "WARNING"
-        message = "Dataset has fewer rows than columns; high dimensional structure may cause unstable analysis."
-
-    elif rows < 50:
-        status = "CRITICAL"
-        message = "Dataset contains extremely few samples; structural reliability is very low."
-
-    elif rows < 500:
-        status = "WARNING"
-        message = "Dataset has relatively few samples; statistical estimates may be unstable."
-
-    else:
-        status = "SAFE"
-        message = "Dataset size appears structurally adequate."
-
-    return TestResult(
-        test="dataset_size",
-        status=status,
-        message=message,
-        affected_columns=None,
-        metrics={"rows": rows}
-    )
-        
-
-def test_global_missing(signals: dict):
-    ratio = signals['global_missing_ratio']
-    percent = ratio * 100
-    
-    if percent <= 5:
-        status = "SAFE"
-        message = "Dataset's missingness can be fixed with imputation"
-    elif percent <= 15:
-        status = "WARNING"
-        message = "Dataset's has moderate missingness, imputation may be unreliable"
-    else:
-        status = "CRITICAL"
-        message = "Dataset missingness is extreme, statistical measurements are unreliable"
-        
-    return TestResult(
-        test="global_missing",
-        status=status,
-        message=message,
-        affected_columns=None,
-        metrics={"global_missing_ratio" : ratio}
-    )
+    logger.info(f"Compute missing_risk: {ratio}")
+    return min(ratio / 0.3, 1.0)  # 30% = max risk
 
 
-def test_column_missing(signals : dict):
-    data = signals['column_missing_ratio']
-    
-    if len(data) != 0:
-    
-        max_missing = max(data.values())
-        col = next((k for k, v in data.items() if v == max_missing), None)
-        
-        percent = max_missing * 100
-        
-        if percent <= 5:
-            status = "SAFE"
-            message = "Column missingness is low, can be fixed with imputation"
-                    
-        elif percent <= 15:
-            status = "WARNING"
-            message = "Column missingness is moderate, only imputation would be unreliable"
-            
-        else:
-            status = "CRITICAL"
-            message = "Column missingness is high, statistical metrics are unreliable"
-            
-    return TestResult(
-        test="column_missing",
-        status=status,
-        message=message,
-        affected_columns=col,
-        metrics={"column_missing_ratio" : max_missing}
-    )
-
-def test_duplicates(signals : dict):
+def duplicate_risk(signals):
     ratio = signals["duplicate_ratio"]
-    percent = ratio * 100
     
-    if percent <= 1:
-        status = "SAFE"
-        message = "Dataset's duplicates can be safely removed without too much data loss"
-    elif percent <= 5:
-        status = "WARNING"
-        message = "Dataset's has moderate duplicates, removing may thin the data"
-    else:
-        status = "CRITICAL"
-        message = "Dataset duplicates is extreme, removing will reduce significant portion of data"
-        
-    return TestResult(
-        test="duplicates",
-        status=status,
-        message=message,
-        affected_columns=None,
-        metrics={"duplicates_ratio" : ratio}
-    )
-   
-def test_constant_columns(signals : dict):
-    cols = signals["constant_columns"]
-    ratio = signals["constant_ratio"]
-    
-    if ratio != 0:
-        percent = ratio * 100
-        
-        if percent > 30:
-            status = "CRITICAL"
-            message = "Constant cols exists, "
-        elif percent > 0:
-            status = "WARNING"
-            message = "Constant cols exists, "
-            
-    else:
-        status = "SAFE"
-        message = "No constant columns detected"
-    
-    return TestResult(
-        test="constant_columns",
-        status=status,
-        message=message,
-        affected_columns=[cols],
-        metrics={"constant_columns_ratio" : ratio}
-    )
+    logger.info(f"Compute duplicate_risk: {ratio}")
+    return min(ratio / 0.2, 1.0)  # 20% = max risk
 
-def test_mixed_columns(signals : dict):
-    cols = signals["mixed_type_columns"]
+
+def constant_risk(signals):
+    ratio = signals["constant_ratio"]
+    logger.info(f"Compute constant_risk: {ratio}")
+
+    return min(ratio / 0.3, 1.0)
+
+
+def hidden_missing_risk(signals):
+    data = signals["hidden_missing_ratio"]
+    if not data:
+        return 0.0
+    max_ratio = max(data.values())
+
+    logger.info(f"Compute hidden_missing_risk: {max_ratio}")
+    return min(max_ratio / 0.3, 1.0)
+
+
+def mixed_type_risk(signals):
     ratio = signals["mixed_ratio"]
 
-    if ratio != 0:
-        percent = ratio * 100
-        
-        if percent > 20:
-            status = "CRITICAL"
-            message = "Mixed cols exists, "
-        elif percent > 0:
-            status = "WARNING"
-            message = "Mixed cols exists, "
-    
-    return TestResult(
-        test="mixed_column",
-        status=status,
-        message=message,
-        affected_columns=[cols],
-        metrics={"mixed_column_ratio" : ratio}
-    )
-    
-    
-def test_hidden_missing(signals : dict):
-    data = signals["hidden_missing_ratio"]
-    
-    max_missing = max(data.values())
-    col = next((k for k, v in data.items() if v == max_missing), None)
-    
-    if max_missing != 0:
-        percent = max_missing * 100
-        
-        if percent > 20:
-            status = "CRITICAL"
-            message = "hidden missing values exists, "
-        elif percent > 0:
-            status = "WARNING"
-            message = "hidden missing values exists, "
-            
-    else:
-        status = "SAFE"
-        message = "No hidden missing values detected"
-            
-    return TestResult(
-        test="hidden_missing",
-        status=status,
-        message=message,
-        affected_columns=col,
-        metrics={"hidden_missing_ratio" : max_missing}
-    )
+    logger.info(f"Compute mixed_type_risk: {ratio}")
+    return min(ratio / 0.2, 1.0)
 
-def main():
+
+# ------------------ HARD FAILURES ------------------
+
+def check_hard_failures(signals):
     
-    validate_data(signals)
     
-    print(test_dataset_size(signals))
-    print(test_global_missing(signals))
-    print(test_column_missing(signals))
-    print(test_duplicates(signals))
-    print(test_constant_columns(signals))
-    print(test_mixed_columns(signals))
-    print(test_hidden_missing(signals))
+    # Mixed types → immediate failure
+    logger.info(f"Checking hard failures: Mixed type")
+    if signals["mixed_ratio"] > 0:
+        return TestResult(
+            dimension=DIMENSION,
+            name="mixed_type_columns",
+            status="CRITICAL",
+            reason="Mixed data types detected; structure is ambiguous",
+            risk=1.0,
+            affected_columns=signals["mixed_type_columns"],
+            metrics={"mixed_ratio": signals["mixed_ratio"]}
+        )
+
+    # Extreme hidden missing
+    logger.info(f"Checking hard failures: Hidden missing")
+    if signals["hidden_missing_ratio"]:
+        max_hidden = max(signals["hidden_missing_ratio"].values())
+        if max_hidden > 0.5:
+            return TestResult(
+                dimension=DIMENSION,
+                name="hidden_missing",
+                status="CRITICAL",
+                reason="Extreme hidden missing values detected",
+                risk=1.0,
+                metrics={"max_hidden_missing": max_hidden}
+            )
+
+    return None
+
+
+# ------------------ AGGREGATION ------------------
+
+def aggregate_risk(signals):
+
+    risks = {
+        "missing": missing_risk(signals),
+        "duplicates": duplicate_risk(signals),
+        "constant": constant_risk(signals),
+        "hidden": hidden_missing_risk(signals),
+    }
+
+    # weights based on severity (can be tuned later)
+    weights = {
+        "missing": 0.3,
+        "duplicates": 0.2,
+        "constant": 0.2,
+        "hidden": 0.3,
+    }
+
+    total = sum(risks[k] * weights[k] for k in risks)
+
+    logger.info(f"Aggregating risk signals")
+    return total, risks
+
+
+# ------------------ FINAL DECISION ------------------
+
+def decision_from_risk(total_risk):
     
+    logger.info(f"Taking a decision based on risk")
+
+    if total_risk < 0.3:
+        return "SAFE", "Dataset structure is clean"
+    elif total_risk < 0.7:
+        return "WARNING", "Dataset has moderate structural issues"
+    else:
+        return "CRITICAL", "Dataset structure is unreliable"
+
+
+# ------------------ MAIN PIPELINE ------------------
+
+def run_data_integrity(signals: dict) -> TestResult:
+    
+    validate_signals(signals)
+    try:
+        # 1. Hard failures first
+        hard_fail = check_hard_failures(signals)
+        if hard_fail:
+            return hard_fail
+
+        # 2. Aggregate risk
+        total_risk, individual_risks = aggregate_risk(signals)
+
+        # 3. Final decision
+        status, reason = decision_from_risk(total_risk)
+
+        return TestResult(
+            dimension=DIMENSION,
+            name="data_integrity_overall",
+            status=status,
+            reason=reason,
+            risk=round(total_risk, 3),
+            metrics={
+                "total_risk": total_risk,
+                "individual_risks": individual_risks
+            }
+        )
+    
+    except Exception as e:
+        logger.error(
+            f"Signal failed: {signals.__name__}",
+            extra={"signal": signals.__name__, "error": str(e)}
+        )
+        
+        
+# ------------------ Entry ------------------
+
 if __name__ == "__main__":
-    main()
+    run_data_integrity(signals)
+    
+    
