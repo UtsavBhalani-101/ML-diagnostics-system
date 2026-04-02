@@ -1,29 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Activity, AlertTriangle, ShieldCheck, ShieldAlert, ChevronDown, Database, HardDrive, BarChart3 } from "lucide-react";
-import type { Layer1FinalOutput, Layer1RiskItem } from "@/lib/api";
+import { Activity, Database, HardDrive, BarChart3 } from "lucide-react";
+import type { Layer1FinalOutput, Layer1KeyFacts, DimensionResult } from "@/lib/api";
 import { getLayer1Output } from "@/lib/api";
+import { RiskGauge } from "@/components/diagnostics/risk-gauge";
+import { RiskBar } from "@/components/diagnostics/risk-bar";
+import { DimensionCard } from "@/components/diagnostics/dimension-card";
 
 type PageState = "loading" | "empty" | "ready" | "error";
+
+// ── Dimension display name mapping ──
+const DIMENSION_ORDER: Array<{ key: string; label: string }> = [
+    { key: "data_integrity", label: "Data Integrity" },
+    { key: "target_viability", label: "Target Viability" },
+    { key: "sample_adequacy", label: "Sample Adequacy" },
+];
 
 export default function Layer1ReportPage() {
     const [pageState, setPageState] = useState<PageState>("loading");
     const [data, setData] = useState<Layer1FinalOutput | null>(null);
-    const [passedOpen, setPassedOpen] = useState(false);
+    const [facts, setFacts] = useState<Layer1KeyFacts | null>(null);
 
     useEffect(() => {
         async function fetchData() {
             try {
                 const response = await getLayer1Output();
                 const output = response?.final_output;
-                if (!output || !output.overall_status) {
+                if (!output || !output.overall) {
                     setPageState("empty");
                     return;
                 }
                 setData(output);
+
+                // Extract key facts from logic.facts
+                const keyFacts = response?.logic?.facts;
+                if (keyFacts) setFacts(keyFacts);
+
                 setPageState("ready");
             } catch {
                 setPageState("empty");
@@ -31,6 +46,18 @@ export default function Layer1ReportPage() {
         }
         fetchData();
     }, []);
+
+    // Sort dimensions by risk severity (highest first)
+    const sortedDimensions = useMemo(() => {
+        if (!data?.dimensions) return [];
+        return DIMENSION_ORDER
+            .map(({ key }) => ({
+                key,
+                dimension: (data.dimensions as Record<string, DimensionResult>)[key],
+            }))
+            .filter((d) => d.dimension != null)
+            .sort((a, b) => b.dimension.risk - a.dimension.risk);
+    }, [data]);
 
     // ── Loading ──
     if (pageState === "loading") {
@@ -40,7 +67,7 @@ export default function Layer1ReportPage() {
                 <div className="relative z-10 flex flex-col items-center gap-4">
                     <div className="size-12 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                     <p className="text-muted-foreground font-mono text-sm tracking-wide">
-                        Loading Layer 1 Diagnostics Report…
+                        Loading structural risk assessment…
                     </p>
                 </div>
             </main>
@@ -73,185 +100,133 @@ export default function Layer1ReportPage() {
         );
     }
 
-    // ── Helpers ──
-    const statusColor = (s: string) => {
-        const v = s.toUpperCase();
-        if (v === "CRITICAL" || v === "DANGER") return { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400", dot: "bg-red-500" };
-        if (v === "WARNING") return { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-400", dot: "bg-amber-500" };
-        return { bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-400", dot: "bg-emerald-500" };
-    };
-
-    const overall = statusColor(data.overall_status);
-    const summary = data.summary;
-    const facts = data.key_facts;
-    const criticalRisks = data.risks?.critical ?? [];
-    const warningRisks = data.risks?.warning ?? [];
-    const noIssues = data.no_issues ?? [];
-
-    const safe = (v: unknown, fallback: string = "N/A") =>
-        v !== null && v !== undefined && v !== "" ? String(v) : fallback;
-
     return (
         <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
             <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
 
-            <section className="relative z-10 w-full max-w-6xl mx-auto py-14 px-8 flex flex-col gap-10">
-                {/* ── Page Header ── */}
-                <div className="flex items-center gap-3 mb-2">
-                    <Link href={"/diagnostics" as Route} className="text-muted-foreground hover:text-foreground transition-colors text-base font-mono">
+            <section className="relative z-10 w-full max-w-6xl mx-auto py-14 px-6 md:px-8 flex flex-col gap-10">
+                {/* ── Breadcrumb ── */}
+                <div className="flex items-center gap-3">
+                    <Link
+                        href={"/diagnostics" as Route}
+                        className="text-muted-foreground hover:text-foreground transition-colors text-base font-mono"
+                    >
                         ← Diagnostics
                     </Link>
                     <span className="text-muted-foreground/40">/</span>
-                    <span className="text-base font-mono text-foreground">Layer 1 Report</span>
+                    <span className="text-base font-mono text-foreground">
+                        Structural Risk Assessment
+                    </span>
                 </div>
 
-                {/* ── Layer Context Tag ── */}
-                <div className="mb-1">
+                {/* ── Layer Context ── */}
+                <div>
                     <p className="text-base font-semibold font-mono tracking-wide text-muted-foreground">
-                        Layer 1 — Global Structural Validation
+                        Layer 1 — Structural Risk Assessment
                     </p>
                     <p className="text-sm font-mono text-muted-foreground/75 mt-0.5">
-                        Pre-model structural integrity assessment.
+                        Pre-model data quality evaluation across 3 structural dimensions.
                     </p>
                 </div>
 
-                {/* ══════ 1. Overall Status Banner ══════ */}
-                <div className={`rounded-xl border ${overall.border} ${overall.bg} p-7 flex items-center gap-6`}>
-                    <div className={`size-16 rounded-full ${overall.bg} border ${overall.border} flex items-center justify-center shrink-0`}>
-                        {data.overall_status.toUpperCase() === "SAFE" ? (
-                            <ShieldCheck className={`size-8 ${overall.text}`} />
-                        ) : (
-                            <ShieldAlert className={`size-8 ${overall.text}`} />
-                        )}
+                {/* ══════════════════════════════════════════════
+                    1. HERO SECTION — Overall Risk
+                ══════════════════════════════════════════════ */}
+                <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-8 md:p-10 flex flex-col items-center">
+                    <h2 className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-6">
+                        Overall Data Risk
+                    </h2>
+
+                    <RiskGauge
+                        risk={data.overall.risk}
+                        status={data.overall.status}
+                    />
+
+                    {/* Full-width risk bar */}
+                    <div className="w-full max-w-lg mt-8">
+                        <RiskBar
+                            risk={data.overall.risk}
+                            height="h-2.5"
+                            showMarker={true}
+                            showLabels={true}
+                        />
                     </div>
-                    <div>
-                        <p className="text-sm font-mono uppercase tracking-widest text-muted-foreground mb-1">
-                            Overall Data Risk
-                        </p>
-                        <h2 className={`text-3xl md:text-4xl font-bold tracking-tight ${overall.text}`}>
-                            {data.overall_status.toUpperCase()}
-                        </h2>
-                    </div>
-                    <div className={`ml-auto size-3.5 rounded-full ${overall.dot} animate-pulse`} />
                 </div>
 
-                {/* ══════ 2. Summary Cards ══════ */}
-                {summary && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-                        <SummaryCard label="Total Tests" value={safe(summary.total_tests)} accent="text-primary" />
-                        <SummaryCard label="Critical" value={safe(summary.critical)} accent="text-red-400" />
-                        <SummaryCard label="Warning" value={safe(summary.warning)} accent="text-amber-400" />
-                        <SummaryCard label="Safe" value={safe(summary.safe)} accent="text-emerald-400" />
-                    </div>
-                )}
-
-                {/* ══════ 3. Key Facts ══════ */}
+                {/* ══════════════════════════════════════════════
+                    2. DATA OVERVIEW (Key Facts)
+                ══════════════════════════════════════════════ */}
                 {facts && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        {/* Dataset Size */}
-                        {facts.size && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
-                                <div className="flex items-center gap-2.5 mb-5">
-                                    <Database className="size-5 text-primary" />
-                                    <h3 className="text-base font-semibold uppercase tracking-wide">Dataset Size</h3>
-                                </div>
-                                <div className="space-y-3 text-base font-mono">
-                                    <Fact label="Rows" value={safe(facts.size.rows?.toLocaleString())} />
-                                    <Fact label="Columns" value={safe(facts.size.columns)} />
-                                    <Fact label="Scale" value={safe(facts.size.scale)} />
-                                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Dataset Dimensions */}
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Database className="size-4 text-primary" />
+                                <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
+                                    Dataset
+                                </h3>
                             </div>
-                        )}
+                            <div className="space-y-2.5 text-sm font-mono">
+                                <FactRow label="Shape" value={facts.dimensions.shape} />
+                                <FactRow label="Rows" value={facts.dimensions.rows.toLocaleString()} />
+                                <FactRow label="Columns" value={String(facts.dimensions.columns)} />
+                                <FactRow label="Scale" value={facts.dimensions.scale_class} />
+                            </div>
+                        </div>
+
                         {/* Memory */}
-                        {facts.memory && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
-                                <div className="flex items-center gap-2.5 mb-5">
-                                    <HardDrive className="size-5 text-primary" />
-                                    <h3 className="text-base font-semibold uppercase tracking-wide">Memory</h3>
-                                </div>
-                                <div className="space-y-3 text-base font-mono">
-                                    <Fact label="Usage" value={facts.memory.usage_mb != null ? `${facts.memory.usage_mb} MB` : "N/A"} />
-                                    <Fact label="Class" value={safe(facts.memory.class)} />
-                                </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <HardDrive className="size-4 text-primary" />
+                                <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
+                                    Memory
+                                </h3>
                             </div>
-                        )}
+                            <div className="space-y-2.5 text-sm font-mono">
+                                <FactRow label="Usage" value={`${facts.memory.memory_mb} MB`} />
+                                <FactRow label="Class" value={facts.memory.memory_class} />
+                            </div>
+                        </div>
+
                         {/* Feature Mix */}
-                        {facts.feature_mix && (
-                            <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6">
-                                <div className="flex items-center gap-2.5 mb-5">
-                                    <BarChart3 className="size-5 text-primary" />
-                                    <h3 className="text-base font-semibold uppercase tracking-wide">Feature Mix</h3>
-                                </div>
-                                <div className="space-y-3 text-base font-mono">
-                                    <Fact label="Type" value={safe(facts.feature_mix.type)} />
-                                    <Fact label="Numeric" value={facts.feature_mix.numeric_ratio != null ? `${(facts.feature_mix.numeric_ratio * 100).toFixed(0)}%` : "N/A"} />
-                                    <Fact label="Categorical" value={facts.feature_mix.categorical_ratio != null ? `${(facts.feature_mix.categorical_ratio * 100).toFixed(0)}%` : "N/A"} />
-                                </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <BarChart3 className="size-4 text-primary" />
+                                <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
+                                    Feature Mix
+                                </h3>
                             </div>
-                        )}
-                    </div>
-                )}
-
-                {/* ══════ 4. Critical Risks ══════ */}
-                {criticalRisks.length > 0 && (
-                    <div>
-                        <h3 className="text-xl font-semibold mb-5 flex items-center gap-2.5">
-                            <ShieldAlert className="size-6 text-red-400" />
-                            Critical Risks
-                            <span className="text-sm font-mono bg-red-500/15 text-red-400 px-2.5 py-0.5 rounded-full ml-1">{criticalRisks.length}</span>
-                        </h3>
-                        <div className="grid gap-5">
-                            {criticalRisks.map((risk, i) => (
-                                <RiskCard key={risk.id ?? i} risk={risk} severity="critical" />
-                            ))}
+                            <div className="space-y-2.5 text-sm font-mono">
+                                <FactRow label="Type" value={facts.feature_mix.mix_type} />
+                                <FactRow label="Numeric" value={`${(facts.feature_mix.num_ratio * 100).toFixed(0)}%`} />
+                                <FactRow label="Categorical" value={`${(facts.feature_mix.cat_ratio * 100).toFixed(0)}%`} />
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {/* ══════ 5. Warning Risks ══════ */}
-                {warningRisks.length > 0 && (
-                    <div>
-                        <h3 className="text-xl font-semibold mb-5 flex items-center gap-2.5">
-                            <AlertTriangle className="size-6 text-amber-400" />
-                            Warning Risks
-                            <span className="text-sm font-mono bg-amber-500/15 text-amber-400 px-2.5 py-0.5 rounded-full ml-1">{warningRisks.length}</span>
-                        </h3>
-                        <div className="grid gap-4">
-                            {warningRisks.map((risk, i) => (
-                                <RiskCard key={risk.id ?? i} risk={risk} severity="warning" />
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {/* ══════════════════════════════════════════════
+                    3. DIMENSION CARDS
+                ══════════════════════════════════════════════ */}
+                <div>
+                    <h2 className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-5">
+                        Structural Dimensions
+                        <span className="text-muted-foreground/40 ml-2">
+                            — sorted by risk severity
+                        </span>
+                    </h2>
 
-                {/* ══════ 6. Passed Checks (Collapsible) ══════ */}
-                {noIssues.length > 0 && (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
-                        <button
-                            onClick={() => setPassedOpen(!passedOpen)}
-                            className="w-full flex items-center justify-between px-7 py-5 text-left hover:bg-emerald-500/5 transition-colors cursor-pointer"
-                        >
-                            <span className="flex items-center gap-2.5 text-base font-semibold">
-                                <ShieldCheck className="size-5 text-emerald-400" />
-                                Passed Checks ({noIssues.length})
-                            </span>
-                            <ChevronDown className={`size-5 text-emerald-400 transition-transform duration-200 ${passedOpen ? "rotate-180" : ""}`} />
-                        </button>
-                        {passedOpen && (
-                            <div className="px-7 pb-5 space-y-3">
-                                {noIssues.map((item, i) => (
-                                    <div key={item.id ?? i} className="flex items-start gap-3 py-2.5 border-t border-emerald-500/10 first:border-0">
-                                        <div className="size-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                                        <div>
-                                            <p className="text-base font-medium">{safe(item.check_name)}</p>
-                                            <p className="text-sm text-muted-foreground font-mono mt-0.5">{safe(item.title)}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                    <div className="space-y-4">
+                        {sortedDimensions.map(({ key, dimension }, index) => (
+                            <DimensionCard
+                                key={key}
+                                name={key}
+                                dimension={dimension}
+                                defaultExpanded={index === 0}
+                            />
+                        ))}
                     </div>
-                )}
+                </div>
 
                 {/* Bottom spacer */}
                 <div className="h-8" />
@@ -260,87 +235,13 @@ export default function Layer1ReportPage() {
     );
 }
 
-/* ──────────────────── Sub-components ──────────────────── */
+/* ──────────────────── Sub-component ──────────────────── */
 
-function SummaryCard({ label, value, accent }: { label: string; value: string; accent: string }) {
-    return (
-        <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6 text-center">
-            <p className={`text-4xl font-bold ${accent}`}>{value}</p>
-            <p className="text-sm font-mono uppercase tracking-wide text-muted-foreground mt-1.5">{label}</p>
-        </div>
-    );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
+function FactRow({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex justify-between items-center">
             <span className="text-muted-foreground">{label}</span>
             <span className="font-medium text-foreground">{value}</span>
-        </div>
-    );
-}
-
-function RiskCard({ risk, severity }: { risk: Layer1RiskItem; severity: "critical" | "warning" }) {
-    const isCritical = severity === "critical";
-    const borderColor = isCritical ? "border-red-500/25" : "border-amber-500/25";
-    const bgColor = isCritical ? "bg-red-500/5" : "bg-amber-500/5";
-    const accentText = isCritical ? "text-red-400" : "text-amber-400";
-    const badgeBg = isCritical ? "bg-red-500/15" : "bg-amber-500/15";
-
-    const safe = (v: unknown, fb: string = "N/A") =>
-        v !== null && v !== undefined && v !== "" ? String(v) : fb;
-
-    return (
-        <div className={`rounded-xl border ${borderColor} ${bgColor} p-6`}>
-            <div className="flex items-start justify-between gap-4 mb-3">
-                <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-base">{safe(risk.title)}</h4>
-                    <p className="text-sm text-muted-foreground font-mono mt-1">{safe(risk.check_name)}</p>
-                </div>
-                <span className={`text-sm font-mono px-2.5 py-1 rounded-full shrink-0 ${badgeBg} ${accentText}`}>
-                    {safe(risk.scope)}
-                </span>
-            </div>
-
-            <div className="flex flex-wrap gap-4 text-sm font-mono text-muted-foreground">
-                <span>Metric: <span className={`font-medium ${accentText}`}>{safe(risk.metric)}</span></span>
-                {risk.risk_code && <span>Code: {risk.risk_code}</span>}
-            </div>
-
-            {/* Details from info */}
-            {typeof risk.info?.details === "string" ? (
-                <p className="mt-3 text-sm text-muted-foreground border-t border-white/5 pt-3">
-                    {risk.info.details}
-                </p>
-            ) : null}
-
-            {/* Affected columns */}
-            {risk.columns && risk.columns.length > 0 && (
-                <div className="mt-3 border-t border-white/5 pt-3">
-                    <p className="text-sm text-muted-foreground mb-2">Affected Columns:</p>
-                    <div className="flex flex-wrap gap-2">
-                        {risk.columns.map((col) => (
-                            <span key={col} className={`text-sm font-mono px-2.5 py-1 rounded ${badgeBg} ${accentText}`}>
-                                {col}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Detected placeholders */}
-            {risk.detected_placeholders && risk.detected_placeholders.length > 0 && (
-                <div className="mt-3 border-t border-white/5 pt-3">
-                    <p className="text-sm text-muted-foreground mb-2">Detected Placeholders:</p>
-                    <div className="flex flex-wrap gap-2">
-                        {risk.detected_placeholders.map((ph) => (
-                            <span key={ph} className={`text-sm font-mono px-2.5 py-1 rounded ${badgeBg} ${accentText}`}>
-                                {`"${ph}"`}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

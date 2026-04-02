@@ -2,17 +2,20 @@ import pandas as pd
 import numpy as np
 import sys
 import traceback
-from dataclasses import asdict
-from engine.Layer_1 import signals
-from engine.Layer_1 import logic
+import logging
+
+from engine.Layer_1 import Signals as signals
+from engine.Layer_1 import Logic as logic
 from engine.Layer_1.formatter import format_final_output
 from Backend.file_support_check import load_dataframe_from_file
 
+logger = logging.getLogger(__name__)
 
+
+# -------------------------
+# UTILS
+# -------------------------
 def convert_numpy_types(obj):
-    """
-    Recursively convert numpy types to Python native types for JSON serialization.
-    """
     if isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
@@ -22,46 +25,36 @@ def convert_numpy_types(obj):
     elif isinstance(obj, dict):
         return {k: convert_numpy_types(v) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [convert_numpy_types(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_numpy_types(item) for item in obj)
-    else:
-        return obj
+        return [convert_numpy_types(i) for i in obj]
+    return obj
 
 
+# -------------------------
+# FACTS
+# -------------------------
 def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
-    """
-    Compute key facts about the dataset for the frontend key_facts section.
-    Uses signals + DataFrame to produce dimensions, memory, and feature_mix.
-    """
     rows = signal_output["rows"]
     cols = signal_output["cols"]
 
-    # Scale classification
     total_cells = rows * cols
-    if total_cells < 10_000:
-        scale_class = "small"
-    elif total_cells < 1_000_000:
-        scale_class = "medium"
-    else:
-        scale_class = "large"
+    scale_class = (
+        "small" if total_cells < 10_000
+        else "medium" if total_cells < 1_000_000
+        else "large"
+    )
 
-    # Memory usage
-    memory_bytes = df.memory_usage(deep=True).sum()
-    memory_mb = round(memory_bytes / (1024 * 1024), 2)
+    memory_mb = round(df.memory_usage(deep=True).sum() / (1024 * 1024), 2)
+    memory_class = (
+        "light" if memory_mb < 10
+        else "moderate" if memory_mb < 100
+        else "heavy"
+    )
 
-    if memory_mb < 10:
-        memory_class = "light"
-    elif memory_mb < 100:
-        memory_class = "moderate"
-    else:
-        memory_class = "heavy"
-
-    # Feature mix
     num_cols = len(df.select_dtypes(include="number").columns)
     cat_cols = cols - num_cols
-    num_ratio = round(num_cols / cols, 2) if cols > 0 else 0
-    cat_ratio = round(cat_cols / cols, 2) if cols > 0 else 0
+
+    num_ratio = round(num_cols / cols, 2) if cols else 0
+    cat_ratio = round(cat_cols / cols, 2) if cols else 0
 
     if num_ratio > 0.8:
         mix_type = "Mostly Numeric"
@@ -91,99 +84,58 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
     }
 
 
-def run_logic_tests(signal_output: dict) -> list:
-    """
-    Run all logic tests and collect results as a list of dicts.
-    Handles edge cases where certain tests may fail (e.g., empty hidden_missing_ratio).
-    """
-    logic.validate_data(signal_output)
-
-    # (function, test_name) — test_name matches logic.py's TestResult.test field
-    test_functions = [
-        (logic.test_dataset_size, "dataset_size"),
-        (logic.test_global_missing, "global_missing"),
-        (logic.test_column_missing, "column_missing"),
-        (logic.test_duplicates, "duplicates"),
-        (logic.test_constant_columns, "constant_columns"),
-        (logic.test_mixed_columns, "mixed_column"),
-        (logic.test_hidden_missing, "hidden_missing"),
-    ]
-
-    results = []
-    for test_fn, test_name in test_functions:
-        try:
-            result = test_fn(signal_output)
-            results.append(asdict(result))
-        except Exception as e:
-            # If a test fails (e.g., empty data / no mixed cols), record gracefully
-            results.append({
-                "test": test_name,
-                "status": "SAFE",
-                "message": f"Test skipped: {str(e)}",
-                "affected_columns": None,
-                "metrics": None,
-            })
-
-    return results
-
-
+# -------------------------
+# MAIN PIPELINE
+# -------------------------
 def run_pipeline(file_path):
-    """
-    Run the full Layer 1 diagnostic pipeline.
-
-    Layer 1 always analyzes the ENTIRE DataFrame (all columns).
-    Target column specification has no effect on Layer 1 output.
-
-    Args:
-        file_path: Path to the dataset file
-
-    Returns:
-        Dictionary with pipeline results (JSON-serializable)
-    """
-    results = {}
-
     try:
-        # 1. Load the data using universal loader (supports all formats)
+        logger.info("Loading dataset")
         df = load_dataframe_from_file(file_path)
-        results['data_loaded'] = True
-        results['shape'] = df.shape
 
-        # 2. Execute Signal Extraction
+        # 1. Signals
+        logger.info("Running signal extraction")
         signal_output = signals.run_signal_extraction(df)
-        results['signals'] = signal_output
 
-        # 3. Compute key facts from signals + DataFrame
+        # 2. Facts
         facts = compute_facts(df, signal_output)
 
-        # 4. Execute Logic Tests
-        test_results = run_logic_tests(signal_output)
+        # 3. Dimension Evaluations (NEW CORE)
+        logger.info("Evaluating dimensions")
 
-        # Bundle logic output in the format formatter expects
-        results['logic'] = {
-            "facts": facts,
-            "tests": test_results,
+        dimensions = {
+            "data_integrity": logic.evaluate_data_integrity(signal_output),
+            "target_viability": logic.evaluate_target_viability(signal_output),
+            "sample_adequacy": logic.evaluate_sample_adequacy(signal_output),
         }
 
-        # Convert numpy types to native Python types for JSON serialization
-        results = convert_numpy_types(results)
+        # 4. Build logic output
+        result = {
+            "data_loaded": True,
+            "shape": df.shape,
+            "signals": signal_output,
+            "logic": {
+                "facts": facts,
+                "dimensions": dimensions,
+            }
+        }
 
-        # 5. Format final output for frontend
-        final_output = format_final_output(results)
-        results['final_output'] = final_output
+        result = convert_numpy_types(result)
 
-        results['status'] = 'success'
+        # 5. Final formatting
+        final_output = format_final_output(result)
+        result["final_output"] = final_output
+        result["status"] = "success"
 
-        return results
+        logger.info("Pipeline complete")
+
+        return result
 
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Pipeline failed")
         return {"status": "error", "message": str(e)}
 
 
 if __name__ == "__main__":
-    # Test with a sample path if run directly
     if len(sys.argv) > 1:
-        result = run_pipeline(sys.argv[1])
-        print(f"\nPipeline result: {result.get('status')}")
-    else:
-        print("Usage: python pipeline.py <path_to_csv>")
+        res = run_pipeline(sys.argv[1])
+        print(res["status"])

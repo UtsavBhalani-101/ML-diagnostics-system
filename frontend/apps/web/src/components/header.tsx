@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useState } from "react";
 import { AnimatedTabs } from "./animated-tabs";
 import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
@@ -60,7 +61,7 @@ export default function Header() {
             {navTabs.map(({ href, label }) => (
               <Link
                 key={href}
-                href={href}
+                href={href as Route}
                 className="text-sm font-medium text-slate-400 hover:text-primary transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >

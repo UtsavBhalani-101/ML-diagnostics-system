@@ -1,3 +1,4 @@
+import numpy as np
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -11,7 +12,7 @@ logger = logging.getLogger()
 
 # ------------------ STRUCTURE ------------------
 
-@dataclass
+@dataclass(frozen=True)
 class TestResult:
     dimension: str
     name: str
@@ -60,58 +61,63 @@ def n_to_d_risk(signals):
 
     ratio = n / d
 
-    if ratio >= 10:
-        risk = 0.0
-    elif ratio >= 5:
-        risk = 0.2
-    elif ratio >= 2:
-        risk = 0.5
-    elif ratio >= 1:
-        risk = 0.7
-    else:
-        risk = 1.0
+    # Smooth decay (log-based)
+    risk = np.exp(-ratio / 5)
 
-    logger.info(f"n_to_d_ratio={ratio:.2f}, risk={risk}")
-    return risk
+    logger.info(f"n_to_d_ratio={ratio:.2f}, risk={risk:.3f}")
+    return min(risk, 1.0)
 
 
 def sample_size_risk(signals):
     n = signals["rows"]
 
-    if n >= 1000:
-        risk = 0.0
-    elif n >= 500:
-        risk = 0.2
-    elif n >= 200:
-        risk = 0.4
-    elif n >= 100:
-        risk = 0.6
-    else:
-        risk = 0.9
+    # diminishing returns curve
+    risk = np.exp(-n / 300)
 
-    logger.info(f"sample_size={n}, risk={risk}")
-    return risk
+    logger.info(f"sample_size={n}, risk={risk:.3f}")
+    return min(risk, 1.0)
 
 
 # ------------------ AGGREGATION ------------------
 
 def aggregate_sample_adequacy(signals):
 
-    risks = {
-        "n_to_d": n_to_d_risk(signals),
+    # -------------------------
+    # RISKS
+    # -------------------------
+    dominant_risks = {
+        "n_to_d": n_to_d_risk(signals)
+    }
+
+    additive_risks = {
         "sample_size": sample_size_risk(signals)
     }
 
-    weights = {
-        "n_to_d": 0.6,
-        "sample_size": 0.4
+    # -------------------------
+    # COMPUTE
+    # -------------------------
+    dominant_max = max(dominant_risks.values()) if dominant_risks else 0.0
+
+    additive_values = list(additive_risks.values())
+    additive_total = sum(additive_values) / len(additive_values) if additive_values else 0.0
+
+    # -------------------------
+    # FINAL
+    # -------------------------
+    total_risk = max(dominant_max, additive_total)
+
+    logger.info(
+        f"Aggregation | dominant={dominant_max:.3f} "
+        f"additive={additive_total:.3f} "
+        f"total={total_risk:.3f}"
+    )
+
+    return total_risk, {
+        "dominant": dominant_risks,
+        "additive": additive_risks,
+        "dominant_max": dominant_max,
+        "additive_total": additive_total
     }
-
-    total_risk = sum(risks[k] * weights[k] for k in risks)
-
-    logger.info(f"Aggregated risk={total_risk:.3f}")
-
-    return total_risk, risks
 
 
 # ------------------ DECISION ------------------

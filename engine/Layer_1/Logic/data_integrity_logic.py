@@ -12,14 +12,13 @@ logger = logging.getLogger('ml_diag')
 
 # ------------------ STRUCTURE ------------------
 
-@dataclass
+@dataclass(frozen=True)
 class TestResult:
     dimension: str
     name: str
     status: str
     reason: str
     risk: float
-    affected_columns: Optional[List[str]] = None
     metrics: Optional[Dict] = None
 
 
@@ -98,7 +97,6 @@ def check_hard_failures(signals):
             status="CRITICAL",
             reason="Mixed data types detected; structure is ambiguous",
             risk=1.0,
-            affected_columns=signals["mixed_type_columns"],
             metrics={"mixed_ratio": signals["mixed_ratio"]}
         )
 
@@ -122,7 +120,14 @@ def check_hard_failures(signals):
 # ------------------ AGGREGATION ------------------
 
 def aggregate_risk(signals):
+    """
+    Hybrid aggregation:
+    - dominant risks → max()
+    - additive risks → average
+    - final → max(dominant, additive)
+    """
 
+    # --- Compute all risks ---
     risks = {
         "missing": missing_risk(signals),
         "duplicates": duplicate_risk(signals),
@@ -130,19 +135,52 @@ def aggregate_risk(signals):
         "hidden": hidden_missing_risk(signals),
     }
 
-    # weights based on severity (can be tuned later)
-    weights = {
-        "missing": 0.3,
-        "duplicates": 0.2,
-        "constant": 0.2,
-        "hidden": 0.3,
+    logger.info(f"Computed individual risks: {risks}")
+
+    # -------------------------
+    # CLASSIFICATION (CRITICAL STEP)
+    # -------------------------
+    dominant_keys = [
+        "hidden",      # localized corruption → dangerous
+    ]
+
+    additive_keys = [
+        "missing",
+        "duplicates",
+        "constant",
+    ]
+
+    # -------------------------
+    # DOMINANT
+    # -------------------------
+    dominant_values = [risks[k] for k in dominant_keys if k in risks]
+    dominant_max = max(dominant_values) if dominant_values else 0.0
+
+    # -------------------------
+    # ADDITIVE
+    # -------------------------
+    additive_values = [risks[k] for k in additive_keys if k in risks]
+
+    if additive_values:
+        additive_total = sum(additive_values) / len(additive_values)
+    else:
+        additive_total = 0.0
+
+    # -------------------------
+    # FINAL RISK
+    # -------------------------
+    total_risk = max(dominant_max, additive_total)
+
+    logger.info(
+        f"Aggregation | dominant={dominant_max:.3f} "
+        f"additive={additive_total:.3f} "
+        f"total={total_risk:.3f}"
+    )
+
+    return total_risk, {
+        "dominant": {k: risks[k] for k in dominant_keys},
+        "additive": {k: risks[k] for k in additive_keys},
     }
-
-    total = sum(risks[k] * weights[k] for k in risks)
-
-    logger.info(f"Aggregating risk signals")
-    return total, risks
-
 
 # ------------------ FINAL DECISION ------------------
 
@@ -183,7 +221,7 @@ def run_data_integrity(signals: dict) -> TestResult:
             risk=round(total_risk, 3),
             metrics={
                 "total_risk": total_risk,
-                "individual_risks": individual_risks
+                "risk_breakdown": individual_risks
             }
         )
     

@@ -11,7 +11,7 @@ logger = logging.getLogger('ml_diag')
 
 # ------------------ STRUCTURE ------------------
 
-@dataclass
+@dataclass(frozen=True)
 class TestResult:
     dimension: str
     name: str
@@ -115,15 +115,20 @@ def variance_risk(signals):
     if var is None:
         return 0.0
 
-    return 1.0 if var < 1e-5 else 0.2 if var < 1e-3 else 0.0
+    # Smooth decay instead of hard steps
+    risk = np.exp(-var * 1000)  # higher variance → lower risk
+    return min(risk, 1.0)
 
 
 def task_uncertainty_risk(signals):
     conf = signals.get("task_confidence", 1.0)
+
+    logger.info(f"Computing task_uncertainty_risk: {conf}")
+
     risk = (1 - conf) ** 2
 
     if conf < 0.5:
-        risk += 0.3
+        risk += 0.3  # strong penalty for ambiguity
 
     return min(risk, 1.0)
 
@@ -132,32 +137,57 @@ def task_uncertainty_risk(signals):
 
 def aggregate_risk(signals):
 
-    #  DOMINANT RISKS
+    # -------------------------
+    # DOMINANT RISKS
+    # -------------------------
     dominant_risks = {
         "task_uncertainty": task_uncertainty_risk(signals)
     }
 
-    # ADDITIVE RISKS 
+    # -------------------------
+    # ADDITIVE RISKS
+    # -------------------------
     additive_risks = {
         "missing": missing_risk(signals),
         "imbalance": imbalance_risk(signals),
         "variance": variance_risk(signals)
     }
 
-    # Avoid division by zero (edge safety)
-    if additive_risks:
-        additive_total = sum(additive_risks.values()) / len(additive_risks)
-    else:
-        additive_total = 0.0
+    # -------------------------
+    # COMPUTE ADDITIVE
+    # -------------------------
+    additive_values = list(additive_risks.values())
+    additive_total = sum(additive_values) / len(additive_values) if additive_values else 0.0
 
-    dominant_max = max(dominant_risks.values()) if dominant_risks else 0.0
+    # -------------------------
+    # COMPUTE DOMINANT
+    # -------------------------
+    dominant_values = list(dominant_risks.values())
+    dominant_max = max(dominant_values) if dominant_values else 0.0
 
-    # FINAL COMBINATION 
+    # -------------------------
+    # FINAL RISK
+    # -------------------------
     total_risk = max(additive_total, dominant_max)
+
+    logger.info(
+        f"Aggregation | dominant={dominant_max:.3f} "
+        f"additive={additive_total:.3f} "
+        f"total={total_risk:.3f}"
+    )
+
+    # -------------------------
+    # SORTED BREAKDOWN (IMPORTANT)
+    # -------------------------
+    all_risks = {**dominant_risks, **additive_risks}
+    sorted_risks = dict(
+        sorted(all_risks.items(), key=lambda x: x[1], reverse=True)
+    )
 
     return total_risk, {
         "dominant": dominant_risks,
         "additive": additive_risks,
+        "sorted_contributors": sorted_risks,
         "additive_total": additive_total,
         "dominant_max": dominant_max
     }
