@@ -87,14 +87,14 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
 # -------------------------
 # MAIN PIPELINE
 # -------------------------
-def run_pipeline(file_path):
+def run_pipeline(file_path, target_column=None):
     try:
         logger.info("Loading dataset")
         df = load_dataframe_from_file(file_path)
 
         # 1. Signals
         logger.info("Running signal extraction")
-        signal_output = signals.run_signal_extraction(df)
+        signal_output = signals.run_signal_extraction(df, target_column=target_column)
 
         # 2. Facts
         facts = compute_facts(df, signal_output)

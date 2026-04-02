@@ -3,24 +3,26 @@
 import Link from "next/link";
 
 export default function Footer() {
+    const currentYear = new Date().getFullYear();
+
     return (
-        <footer className="w-full border-t border-black/5 dark:border-white/10 py-6 bg-[#f6f6f8] dark:bg-black relative z-20">
-            <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-                <p className="text-xs font-mono text-slate-500 dark:text-slate-500">
-                    © 2024 Diagnostic Sys Inc. All systems normal.
+        <footer className="relative z-20 w-full border-t border-black/5 bg-[#f6f6f8] py-6 dark:border-white/10 dark:bg-black">
+            <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
+                <p className="font-mono text-xs text-slate-500 dark:text-slate-500">
+                    &copy; {currentYear} Diagnostic Sys Inc. All systems normal.
                 </p>
 
                 <div className="flex items-center gap-6">
-                    <p className="text-xs font-mono text-[#135bec] bg-[#135bec]/10 px-2 py-1 rounded">
+                    <p className="rounded bg-[#135bec]/10 px-2 py-1 font-mono text-xs text-[#135bec]">
                         v2.4.1 | Stable
                     </p>
 
-                    <div className="flex gap-4">
+                    <div className="flex items-center gap-4">
                         <a
                             href="https://github.com/UtsavBhalani-101/ML-diagnostics-system"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-slate-500 hover:text-slate-300 transition-colors"
+                            className="text-slate-500 transition-colors hover:text-slate-300"
                         >
                             <span className="sr-only">GitHub</span>
                             <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
@@ -28,13 +30,10 @@ export default function Footer() {
                             </svg>
                         </a>
                         <Link
-                            href="#"
-                            className="text-slate-500 hover:text-slate-300 transition-colors"
+                            href="/docs"
+                            className="font-mono text-xs uppercase tracking-widest text-slate-500 transition-colors hover:text-slate-300"
                         >
-                            <span className="sr-only">Twitter</span>
-                            <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
-                                <path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z" />
-                            </svg>
+                            Docs
                         </Link>
                     </div>
                 </div>

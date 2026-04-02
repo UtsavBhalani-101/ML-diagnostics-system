@@ -1,32 +1,67 @@
 "use client";
 
+import Link from "next/link";
 import { Clock } from "lucide-react";
 
 export default function HowItWorksPage() {
     return (
-        <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
-            {/* Grid Pattern Background */}
-            <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+        <main className="relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
+            <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
 
-            <section className="relative z-10 flex flex-col items-center justify-center flex-grow py-32 px-6">
-                <div className="max-w-2xl w-full text-center">
-                    <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 text-primary mb-6">
+            <section className="relative z-10 mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-16">
+                <div className="max-w-2xl">
+                    <div className="mb-6 inline-flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <Clock className="size-8" />
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-foreground">
+                    <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
                         How it Works
                     </h1>
-                    <p className="text-lg text-muted-foreground font-mono mb-8">
-                        This section is coming soon.
+                    <p className="mt-4 font-mono text-sm text-muted-foreground md:text-base">
+                        The system is intentionally simple: validate first, interpret risk second, model later.
                     </p>
-                    <div className="border border-border rounded-lg p-8 bg-card/50 backdrop-blur-sm">
-                        <p className="text-muted-foreground font-mono text-sm">
-                            We&apos;re building comprehensive documentation to explain the diagnostic pipeline,
-                            analysis layers, and how the system evaluates your data before modeling.
-                        </p>
-                    </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                    <StepCard
+                        title="1. Upload"
+                        body="A dataset is validated on the backend. Empty or invalid files are rejected immediately."
+                    />
+                    <StepCard
+                        title="2. Diagnose"
+                        body="Layer 1 extracts structural signals, converts them into risk by dimension, and returns a real report."
+                    />
+                    <StepCard
+                        title="3. Decide"
+                        body="Use the overall risk, dimension breakdown, primary causes, and quick actions to decide whether to proceed."
+                    />
+                </div>
+
+                <div className="rounded-xl border border-border bg-card/60 p-6 backdrop-blur">
+                    <h2 className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Current Scope
+                    </h2>
+                    <p className="mt-4 text-sm leading-7 text-foreground md:text-base">
+                        Today the system ships a functional Layer 1 structural-risk slice across frontend and backend.
+                        Layer 2 is currently being built and is coming soon. The models layer is not implemented yet,
+                        so the product stays honest about what it can and cannot do right now.
+                    </p>
+                    <Link
+                        href="/docs"
+                        className="mt-5 inline-flex text-sm font-medium text-primary transition-colors hover:text-primary/80"
+                    >
+                        Read the full documentation
+                    </Link>
                 </div>
             </section>
         </main>
+    );
+}
+
+function StepCard({ title, body }: { title: string; body: string }) {
+    return (
+        <div className="rounded-xl border border-border bg-card/60 p-5 backdrop-blur">
+            <h2 className="text-base font-semibold text-foreground">{title}</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">{body}</p>
+        </div>
     );
 }

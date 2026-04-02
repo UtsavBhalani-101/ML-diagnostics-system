@@ -28,13 +28,11 @@ function Hero() {
     return (
         <div className="w-full">
             <div className="container mx-auto">
-                <div className="flex gap-6 py-16 lg:py-24 items-center justify-center flex-col">
-                    {/* Status Badge */}
+                <div className="flex flex-col items-center justify-center gap-6 py-16 lg:py-24">
                     <StatusBadge status="info" message="System Operational" />
 
-                    {/* Main Headline */}
-                    <div className="flex gap-3 flex-col">
-                        <h1 className="text-4xl md:text-6xl max-w-3xl tracking-tight text-center font-semibold">
+                    <div className="flex flex-col gap-3">
+                        <h1 className="max-w-3xl text-center text-4xl font-semibold tracking-tight md:text-6xl">
                             <span className="text-foreground">Diagnose your</span>
                             <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-3 md:pt-1">
                                 &nbsp;
@@ -46,14 +44,8 @@ function Hero() {
                                         transition={{ type: "spring", stiffness: 50 }}
                                         animate={
                                             titleNumber === index
-                                                ? {
-                                                    y: 0,
-                                                    opacity: 1,
-                                                }
-                                                : {
-                                                    y: titleNumber > index ? -150 : 150,
-                                                    opacity: 0,
-                                                }
+                                                ? { y: 0, opacity: 1 }
+                                                : { y: titleNumber > index ? -150 : 150, opacity: 0 }
                                         }
                                     >
                                         {title}
@@ -62,32 +54,30 @@ function Hero() {
                             </span>
                         </h1>
 
-                        <p className="text-base md:text-lg leading-relaxed tracking-tight text-muted-foreground max-w-xl text-center mx-auto">
+                        <p className="mx-auto max-w-xl text-center text-base leading-relaxed tracking-tight text-muted-foreground md:text-lg">
                             Evaluate data readiness, detect structural issues, and assess
-                            modeling risk—before you commit to any ML pipeline.
+                            modeling risk before you commit to any ML pipeline.
                         </p>
                     </div>
 
-                    {/* CTA Buttons */}
-                    <div className="flex flex-row gap-3 mt-4">
+                    <div className="mt-4 flex flex-row gap-3">
                         <Link href="/docs">
-                            <Button size="lg" variant="outline" className="gap-2 h-11 px-6">
-                                Documentation <MoveRight className="w-4 h-4" />
+                            <Button size="lg" variant="outline" className="h-11 gap-2 px-6">
+                                Documentation <MoveRight className="h-4 w-4" />
                             </Button>
                         </Link>
                         <Link href="/diagnostics">
-                            <Button size="lg" className="gap-2 h-11 px-6">
-                                <Play className="w-4 h-4" /> Run Diagnostics
+                            <Button size="lg" className="h-11 gap-2 px-6">
+                                <Play className="h-4 w-4" /> Run Diagnostics
                             </Button>
                         </Link>
                     </div>
 
-                    {/* Bottom Status */}
-                    <div className="flex flex-row gap-6 mt-6 opacity-50">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                    <div className="mt-6 flex flex-row gap-6 opacity-50">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                             Environment: Production
                         </span>
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                             Status: Awaiting Input
                         </span>
                     </div>

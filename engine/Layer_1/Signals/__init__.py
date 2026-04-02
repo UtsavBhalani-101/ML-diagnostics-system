@@ -9,11 +9,12 @@ import logging
 
 from engine.Layer_1.Signals.data_integrity_signals import run_signal_extraction as _run_integrity_signals
 from engine.Layer_1.Signals.sample_adequacy_signals import run_sample_adequacy as _run_sample_signals
+from engine.Layer_1.Signals.target_sanity_signals import run_target_signals
 
 logger = logging.getLogger(__name__)
 
 
-def run_signal_extraction(df: pd.DataFrame) -> dict:
+def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) -> dict:
     """
     Run all signal modules and merge into a single flat dict.
     This is what pipeline.py calls as `signals.run_signal_extraction(df)`.
@@ -57,6 +58,35 @@ def run_signal_extraction(df: pd.DataFrame) -> dict:
             flat["sample_feature_ratio"] = value
         else:
             flat.setdefault(name, value)
+
+    # Target viability signals
+    if target_column and target_column in df.columns:
+        target_results = run_target_signals(df[target_column])
+        for struct in target_results:
+            name = struct.name
+            value = struct.value
+            meta = struct.meta or {}
+
+            if name == "target_validation":
+                reason = str(meta.get("reason", "")).lower()
+                if "entirely missing" in reason:
+                    flat["target_missing_ratio"] = 1.0
+                    flat["target_unique_count"] = 0
+                if "mixed data types" in reason:
+                    flat["target_mixed_type"] = True
+                continue
+
+            if name == "task_type":
+                flat["task_type"] = value
+                flat["task_confidence"] = meta.get("confidence", 0.0)
+                continue
+
+            if value is None and name == "class_imbalance_score":
+                flat[name] = 0.0
+                continue
+
+            if value is not None:
+                flat[name] = value
 
     logger.info(f"Signal extraction complete: {len(flat)} keys")
     return flat

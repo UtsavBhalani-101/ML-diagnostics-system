@@ -1,30 +1,80 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Layers } from "lucide-react";
+import type { ModelsResponse } from "@/lib/api";
+import { getModelsContent } from "@/lib/api";
+
+type PageState = "loading" | "ready" | "error";
 
 export default function ModelsPage() {
-    return (
-        <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
-            {/* Grid Pattern Background */}
-            <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+    const [pageState, setPageState] = useState<PageState>("loading");
+    const [models, setModels] = useState<ModelsResponse | null>(null);
+    const [errorMessage, setErrorMessage] = useState("");
 
-            <section className="relative z-10 flex flex-col items-center justify-center flex-grow py-32 px-6">
-                <div className="max-w-2xl w-full text-center">
-                    <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 text-primary mb-6">
+    useEffect(() => {
+        async function loadModels() {
+            try {
+                const response = await getModelsContent();
+                setModels(response);
+                setPageState("ready");
+            } catch (error) {
+                setErrorMessage(error instanceof Error ? error.message : "Failed to load model status.");
+                setPageState("error");
+            }
+        }
+
+        loadModels();
+    }, []);
+
+    return (
+        <main className="relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
+            <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
+
+            <section className="relative z-10 flex flex-grow flex-col items-center justify-center px-6 py-20">
+                <div className="w-full max-w-2xl text-center">
+                    <div className="mb-6 inline-flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <Layers className="size-8" />
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-foreground">
+                    <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
                         Models
                     </h1>
-                    <p className="text-lg text-muted-foreground font-mono mb-8">
-                        This section is coming soon.
+                    <p className="mx-auto mt-4 max-w-xl font-mono text-sm text-muted-foreground md:text-base">
+                        This system evaluates data before modeling. It does not train or serve models yet.
                     </p>
-                    <div className="border border-border rounded-lg p-8 bg-card/50 backdrop-blur-sm">
-                        <p className="text-muted-foreground font-mono text-sm">
-                            Model selection and training recommendations will be available
-                            after completing the diagnostic phase. Stay tuned.
-                        </p>
-                    </div>
+
+                    {pageState === "loading" && (
+                        <div className="mt-8 rounded-lg border border-border bg-card/50 p-6 font-mono text-sm text-muted-foreground backdrop-blur-sm">
+                            Loading model layer status...
+                        </div>
+                    )}
+
+                    {pageState === "error" && (
+                        <div className="mt-8 rounded-lg border border-red-500/30 bg-red-500/5 p-6 font-mono text-sm text-red-400 backdrop-blur-sm">
+                            {errorMessage || "Model layer status could not be loaded."}
+                        </div>
+                    )}
+
+                    {pageState === "ready" && models && (
+                        <div className="mt-8 rounded-lg border border-border bg-card/50 p-8 backdrop-blur-sm">
+                            <p className="text-lg font-semibold text-foreground">
+                                No models configured yet
+                            </p>
+                            <p className="mt-3 font-mono text-sm text-muted-foreground">
+                                {models.message}
+                            </p>
+                            <div className="mt-6 space-y-3 text-left">
+                                {models.roadmap.map((item) => (
+                                    <div key={item} className="rounded-lg border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-foreground">
+                                        {item}
+                                    </div>
+                                ))}
+                                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100/90">
+                                    Layer 2 is currently being built. It is coming soon.
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </section>
         </main>

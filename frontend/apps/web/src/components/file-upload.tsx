@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
-import type { DragEvent, ChangeEvent } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useRef, useState } from "react";
+import type { ChangeEvent, DragEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import {
-    UploadCloud,
+    AlertCircle,
+    CheckCircle,
     File as FileIcon,
     Loader,
-    CheckCircle,
-    AlertCircle,
     RefreshCw,
     Trash2,
+    UploadCloud,
 } from "lucide-react";
 import { validateFile } from "@/lib/api";
 import type { FileValidationResponse } from "@/lib/api";
@@ -25,20 +25,19 @@ interface FileUploadProps {
 }
 
 export default function FileUpload({ onFileValidated, onReset }: FileUploadProps) {
-    // ── Read persisted state from global store to initialize ──
-    const storedStatus = useDiagnosticsStore((s) => s.fileUploadStatus);
-    const storedFileName = useDiagnosticsStore((s) => s.fileName);
-    const storedFileSize = useDiagnosticsStore((s) => s.fileSize);
-    const storedExtension = useDiagnosticsStore((s) => s.fileExtension);
-    const setFileUploadInfo = useDiagnosticsStore((s) => s.setFileUploadInfo);
+    const storedStatus = useDiagnosticsStore((store) => store.fileUploadStatus);
+    const storedFileName = useDiagnosticsStore((store) => store.fileName);
+    const storedFileSize = useDiagnosticsStore((store) => store.fileSize);
+    const storedExtension = useDiagnosticsStore((store) => store.fileExtension);
+    const setFileUploadInfo = useDiagnosticsStore((store) => store.setFileUploadInfo);
+    const setSelectedFile = useDiagnosticsStore((store) => store.setSelectedFile);
 
-    // Initialize local state from the store (persists across navigations)
     const [status, setStatus] = useState<UploadStatus>(storedStatus);
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState<string>(storedFileName);
     const [fileSize, setFileSize] = useState<number>(storedFileSize);
     const [progress, setProgress] = useState(storedStatus === "success" ? 100 : 0);
-    const [errorMessage, setErrorMessage] = useState<string>("");
+    const [errorMessage, setErrorMessage] = useState("");
     const [validationResponse, setValidationResponse] = useState<FileValidationResponse | null>(
         storedStatus === "success"
             ? { is_valid: true, filename: storedFileName, extension: storedExtension, saved: true, error: null }
@@ -48,23 +47,21 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
 
     const formatFileSize = (bytes: number): string => {
         if (!bytes) return "0 Bytes";
-        const k = 1024;
-        const sizes = ["Bytes", "KB", "MB", "GB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+        const base = 1024;
+        const units = ["Bytes", "KB", "MB", "GB"];
+        const index = Math.floor(Math.log(bytes) / Math.log(base));
+        return `${(bytes / Math.pow(base, index)).toFixed(2)} ${units[index]}`;
     };
 
-    // Process the single file
     const handleFile = async (file: File) => {
-        // Reset state
         setStatus("uploading");
         setFileName(file.name);
         setFileSize(file.size);
         setProgress(0);
         setErrorMessage("");
         setValidationResponse(null);
+        setSelectedFile(null);
 
-        // Simulate progress while uploading
         let currentProgress = 0;
         const progressInterval = setInterval(() => {
             currentProgress += Math.random() * 15;
@@ -77,39 +74,27 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
             clearInterval(progressInterval);
             setProgress(100);
             setValidationResponse(response);
+            setStatus("success");
+            setSelectedFile(file);
+            setFileUploadInfo({
+                status: "success",
+                fileName: file.name,
+                fileSize: file.size,
+                fileExtension: response.extension,
+            });
 
-            // Notify parent component for both valid and invalid results
             if (onFileValidated) {
                 onFileValidated(response);
             }
 
-            if (response.is_valid) {
-                setStatus("success");
-                // Persist to global store
-                setFileUploadInfo({
-                    status: "success",
-                    fileName: file.name,
-                    fileSize: file.size,
-                    fileExtension: response.extension,
-                });
-                // Haptic feedback on success
-                if (navigator.vibrate) {
-                    navigator.vibrate(100);
-                }
-            } else {
-                setStatus("error");
-                setErrorMessage(response.error || "File validation failed. Please upload a valid dataset file.");
-                setFileUploadInfo({
-                    status: "error",
-                    fileName: file.name,
-                    fileSize: file.size,
-                    fileExtension: "",
-                });
+            if (navigator.vibrate) {
+                navigator.vibrate(100);
             }
         } catch (error) {
             clearInterval(progressInterval);
             setProgress(100);
             setStatus("error");
+            setSelectedFile(null);
             setErrorMessage(error instanceof Error ? error.message : "Upload failed. Please try again.");
             setFileUploadInfo({
                 status: "error",
@@ -127,34 +112,38 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
         setProgress(0);
         setErrorMessage("");
         setValidationResponse(null);
+        setSelectedFile(null);
+
         if (inputRef.current) {
             inputRef.current.value = "";
         }
-        // Clear global store
+
         setFileUploadInfo({
             status: "idle",
             fileName: "",
             fileSize: 0,
             fileExtension: "",
         });
+
         if (onReset) {
             onReset();
         }
     };
 
-    const onDrop = (e: DragEvent) => {
-        e.preventDefault();
+    const onDrop = (event: DragEvent) => {
+        event.preventDefault();
         setIsDragging(false);
-        if (status === "uploading") return; // Prevent during upload
 
-        const files = e.dataTransfer.files;
+        if (status === "uploading") return;
+
+        const files = event.dataTransfer.files;
         if (files.length > 0) {
-            handleFile(files[0]!); // Only take the first file
+            handleFile(files[0]!);
         }
     };
 
-    const onDragOver = (e: DragEvent) => {
-        e.preventDefault();
+    const onDragOver = (event: DragEvent) => {
+        event.preventDefault();
         if (status !== "uploading") {
             setIsDragging(true);
         }
@@ -162,16 +151,15 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
 
     const onDragLeave = () => setIsDragging(false);
 
-    const onSelect = (e: ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            handleFile(e.target.files[0]!);
+    const onSelect = (event: ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files && event.target.files.length > 0) {
+            handleFile(event.target.files[0]!);
         }
     };
 
     return (
-        <div className="w-full max-w-3xl mx-auto p-4 md:p-6">
+        <div className="mx-auto w-full max-w-3xl p-4 md:p-6">
             <AnimatePresence mode="wait">
-                {/* ─── IDLE STATE: Show Drop Zone ─── */}
                 {status === "idle" && (
                     <motion.div
                         key="dropzone"
@@ -193,8 +181,8 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                             whileHover={{ scale: 1.01 }}
                             transition={{ duration: 0.2 }}
                             className={clsx(
-                                "relative rounded-2xl p-8 md:p-12 text-center cursor-pointer bg-secondary/50 border border-primary/10 shadow-sm hover:shadow-md backdrop-blur group",
-                                isDragging && "ring-4 ring-primary/30 border-primary"
+                                "group relative cursor-pointer rounded-2xl border border-primary/10 bg-secondary/50 p-8 text-center shadow-sm backdrop-blur hover:shadow-md md:p-12",
+                                isDragging && "border-primary ring-4 ring-primary/30"
                             )}
                         >
                             <div className="flex flex-col items-center gap-5">
@@ -217,37 +205,35 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                                             repeat: isDragging ? Infinity : 0,
                                             ease: "easeInOut",
                                         }}
-                                        className="absolute -inset-4 bg-primary/10 rounded-full blur-md"
+                                        className="absolute -inset-4 rounded-full bg-primary/10 blur-md"
                                         style={{ display: isDragging ? "block" : "none" }}
                                     />
                                     <UploadCloud
                                         className={clsx(
-                                            "w-16 h-16 md:w-20 md:h-20 drop-shadow-sm",
+                                            "h-16 w-16 drop-shadow-sm md:h-20 md:w-20",
                                             isDragging
                                                 ? "text-primary"
-                                                : "text-muted-foreground group-hover:text-primary transition-colors duration-300"
+                                                : "text-muted-foreground transition-colors duration-300 group-hover:text-primary"
                                         )}
                                     />
                                 </motion.div>
 
                                 <div className="space-y-2">
-                                    <h3 className="text-xl md:text-2xl font-semibold text-foreground">
+                                    <h3 className="text-xl font-semibold text-foreground md:text-2xl">
                                         {isDragging ? "Drop your file here" : "Upload your dataset"}
                                     </h3>
-                                    <p className="text-muted-foreground md:text-lg max-w-md mx-auto">
+                                    <p className="mx-auto max-w-md text-muted-foreground md:text-lg">
                                         {isDragging ? (
-                                            <span className="font-medium text-primary">
-                                                Release to upload
-                                            </span>
+                                            <span className="font-medium text-primary">Release to upload</span>
                                         ) : (
                                             <>
                                                 Drag & drop a file here, or{" "}
-                                                <span className="text-primary font-medium">browse</span>
+                                                <span className="font-medium text-primary">browse</span>
                                             </>
                                         )}
                                     </p>
-                                    <p className="text-sm text-muted-foreground/70 font-mono">
-                                        Supports CSV, Excel, Parquet, and JSON files • Single file only
+                                    <p className="font-mono text-sm text-muted-foreground/70">
+                                        Supports CSV, Excel, Parquet, and JSON files - single file only
                                     </p>
                                 </div>
 
@@ -263,7 +249,6 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                     </motion.div>
                 )}
 
-                {/* ─── UPLOADING STATE: Show Progress ─── */}
                 {status === "uploading" && (
                     <motion.div
                         key="uploading"
@@ -271,36 +256,33 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                        className="px-5 py-5 rounded-xl border border-primary/20 bg-card/80 backdrop-blur shadow-md"
+                        className="rounded-xl border border-primary/20 bg-card/80 px-5 py-5 shadow-md backdrop-blur"
                     >
                         <div className="flex items-start gap-4">
-                            {/* File icon */}
                             <div className="relative flex-shrink-0">
-                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-secondary/50 border border-border flex items-center justify-center">
-                                    <FileIcon className="w-8 h-8 text-muted-foreground" />
+                                <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-border bg-secondary/50 md:h-20 md:w-20">
+                                    <FileIcon className="h-8 w-8 text-muted-foreground" />
                                 </div>
                             </div>
 
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <FileIcon className="w-5 h-5 flex-shrink-0 text-primary" />
-                                    <h4 className="font-medium text-base md:text-lg truncate text-foreground" title={fileName}>
+                            <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2">
+                                    <FileIcon className="h-5 w-5 flex-shrink-0 text-primary" />
+                                    <h4 className="truncate text-base font-medium text-foreground md:text-lg" title={fileName}>
                                         {fileName}
                                     </h4>
                                 </div>
-                                <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
-                                    <span className="text-xs md:text-sm font-mono">
+                                <div className="mb-3 flex items-center justify-between text-sm text-muted-foreground">
+                                    <span className="font-mono text-xs md:text-sm">
                                         {formatFileSize(fileSize)}
                                     </span>
                                     <span className="flex items-center gap-1.5">
                                         <span className="font-medium">{Math.round(progress)}%</span>
-                                        <Loader className="w-4 h-4 animate-spin text-primary" />
+                                        <Loader className="h-4 w-4 animate-spin text-primary" />
                                     </span>
                                 </div>
 
-                                {/* Progress bar */}
-                                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${progress}%` }}
@@ -308,7 +290,7 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                                         className="h-full rounded-full bg-primary shadow-inner"
                                     />
                                 </div>
-                                <p className="text-xs text-muted-foreground/70 mt-2 font-mono">
+                                <p className="mt-2 font-mono text-xs text-muted-foreground/70">
                                     Validating file...
                                 </p>
                             </div>
@@ -316,7 +298,6 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                     </motion.div>
                 )}
 
-                {/* ─── SUCCESS STATE ─── */}
                 {status === "success" && (
                     <motion.div
                         key="success"
@@ -324,43 +305,40 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                        className="px-5 py-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 backdrop-blur shadow-md"
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-5 py-5 shadow-md backdrop-blur"
                     >
                         <div className="flex items-start gap-4">
-                            {/* File icon with success badge */}
                             <div className="relative flex-shrink-0">
-                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                                    <FileIcon className="w-8 h-8 text-emerald-500" />
+                                <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 md:h-20 md:w-20">
+                                    <FileIcon className="h-8 w-8 text-emerald-500" />
                                 </div>
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.5 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 15 }}
-                                    className="absolute -right-2 -bottom-2 bg-background rounded-full shadow-sm"
+                                    className="absolute -bottom-2 -right-2 rounded-full bg-background shadow-sm"
                                 >
-                                    <CheckCircle className="w-6 h-6 text-emerald-500" />
+                                    <CheckCircle className="h-6 w-6 text-emerald-500" />
                                 </motion.div>
                             </div>
 
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-medium text-base md:text-lg truncate text-foreground" title={fileName}>
+                            <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2">
+                                    <h4 className="truncate text-base font-medium text-foreground md:text-lg" title={fileName}>
                                         {fileName}
                                     </h4>
                                 </div>
-                                <p className="text-sm text-emerald-500 font-medium mb-1">
-                                    ✓ File validated and saved successfully
+                                <p className="mb-1 text-sm font-medium text-emerald-500">
+                                    File validated and saved successfully
                                 </p>
                                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                    <span className="text-xs md:text-sm font-mono">
+                                    <span className="font-mono text-xs md:text-sm">
                                         {formatFileSize(fileSize)}
-                                        {validationResponse?.extension && ` • ${validationResponse.extension}`}
+                                        {validationResponse?.extension && ` - ${validationResponse.extension}`}
                                     </span>
                                 </div>
 
-                                {/* Completed progress bar */}
-                                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden mt-3">
+                                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
                                     <motion.div
                                         initial={{ width: "90%" }}
                                         animate={{ width: "100%" }}
@@ -369,20 +347,18 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                                     />
                                 </div>
 
-                                {/* Remove button */}
                                 <button
                                     onClick={handleReset}
-                                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-secondary/80 hover:bg-secondary text-muted-foreground hover:text-destructive transition-colors duration-200"
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-secondary/80 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-secondary hover:text-destructive"
                                 >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    Remove & Re-upload
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Remove and re-upload
                                 </button>
                             </div>
                         </div>
                     </motion.div>
                 )}
 
-                {/* ─── ERROR STATE ─── */}
                 {status === "error" && (
                     <motion.div
                         key="error"
@@ -390,51 +366,47 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                        className="px-5 py-5 rounded-xl border border-red-500/30 bg-red-500/5 backdrop-blur shadow-md"
+                        className="rounded-xl border border-red-500/30 bg-red-500/5 px-5 py-5 shadow-md backdrop-blur"
                     >
                         <div className="flex items-start gap-4">
-                            {/* File icon with error badge */}
                             <div className="relative flex-shrink-0">
-                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                                    <FileIcon className="w-8 h-8 text-red-400" />
+                                <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 md:h-20 md:w-20">
+                                    <FileIcon className="h-8 w-8 text-red-400" />
                                 </div>
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.5 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 15 }}
-                                    className="absolute -right-2 -bottom-2 bg-background rounded-full shadow-sm"
+                                    className="absolute -bottom-2 -right-2 rounded-full bg-background shadow-sm"
                                 >
-                                    <AlertCircle className="w-6 h-6 text-red-500" />
+                                    <AlertCircle className="h-6 w-6 text-red-500" />
                                 </motion.div>
                             </div>
 
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-medium text-base md:text-lg truncate text-foreground" title={fileName}>
+                            <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2">
+                                    <h4 className="truncate text-base font-medium text-foreground md:text-lg" title={fileName}>
                                         {fileName}
                                     </h4>
                                 </div>
-                                <p className="text-sm text-red-500 font-mono mb-2">
+                                <p className="mb-2 font-mono text-sm text-red-500">
                                     {errorMessage}
                                 </p>
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3">
-                                    <span className="text-xs md:text-sm font-mono">
+                                <div className="mb-3 flex items-center gap-3 text-sm text-muted-foreground">
+                                    <span className="font-mono text-xs md:text-sm">
                                         {formatFileSize(fileSize)}
                                     </span>
                                 </div>
 
-                                {/* Failed progress bar */}
-                                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full bg-red-500 shadow-inner w-full" />
+                                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                                    <div className="h-full w-full rounded-full bg-red-500 shadow-inner" />
                                 </div>
 
-                                {/* Try Again button */}
                                 <button
                                     onClick={handleReset}
-                                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors duration-200"
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors duration-200 hover:bg-primary/20"
                                 >
-                                    <RefreshCw className="w-4 h-4" />
+                                    <RefreshCw className="h-4 w-4" />
                                     Try Again
                                 </button>
                             </div>
