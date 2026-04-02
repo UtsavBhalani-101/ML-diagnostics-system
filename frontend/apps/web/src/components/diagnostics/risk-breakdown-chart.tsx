@@ -1,16 +1,6 @@
 "use client";
 
 import clsx from "clsx";
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    Tooltip as RechartsTooltip,
-    ResponsiveContainer,
-    Cell,
-    Legend,
-} from "recharts";
 
 interface RiskBreakdownChartProps {
     dominant: Record<string, number>;
@@ -18,45 +8,31 @@ interface RiskBreakdownChartProps {
     className?: string;
 }
 
-interface ChartEntry {
+interface Contribution {
     name: string;
     value: number;
     type: "dominant" | "additive";
 }
 
-const DOMINANT_COLOR = "#f59e0b";
-const ADDITIVE_COLOR = "#6366f1";
+const DOMINANT_COLOR = "linear-gradient(135deg, rgba(245,158,11,0.95), rgba(251,191,36,0.85))";
+const ADDITIVE_COLOR = "linear-gradient(135deg, rgba(99,102,241,0.95), rgba(129,140,248,0.8))";
 
-function formatLabel(key: string): string {
-    return key
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase());
+function formatRiskName(key: string): string {
+    const labels: Record<string, string> = {
+        mixed_types: "Mixed Types",
+        hidden_missing: "Hidden Missing",
+        missing_values: "Missing Values",
+        constant_columns: "Constant Columns",
+        low_sample: "Low Sample Support",
+        sample_size: "Sample Size",
+        task_uncertainty: "Task Uncertainty",
+    };
+
+    return labels[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function CustomTooltip({
-    active,
-    payload,
-}: {
-    active?: boolean;
-    payload?: Array<{ payload: ChartEntry }>;
-}) {
-    if (!active || !payload || payload.length === 0) return null;
-    const data = payload[0]?.payload;
-    if (!data) return null;
-
-    return (
-        <div className="bg-[#111] border border-white/10 rounded-lg px-3 py-2 shadow-xl">
-            <p className="text-xs font-mono text-foreground font-medium">
-                {data.name}
-            </p>
-            <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                Risk: <span className="text-foreground font-medium">{data.value.toFixed(3)}</span>
-            </p>
-            <p className="text-[10px] font-mono mt-0.5" style={{ color: data.type === "dominant" ? DOMINANT_COLOR : ADDITIVE_COLOR }}>
-                {data.type === "dominant" ? "▪ Dominant (non-dilutable)" : "▪ Additive (combinable)"}
-            </p>
-        </div>
-    );
+function formatRiskValue(value: number): string {
+    return value >= 0.01 ? value.toFixed(2) : value.toFixed(3);
 }
 
 export function RiskBreakdownChart({
@@ -64,84 +40,90 @@ export function RiskBreakdownChart({
     additive,
     className,
 }: RiskBreakdownChartProps) {
-    const data: ChartEntry[] = [
-        ...Object.entries(dominant).map(([key, value]) => ({
-            name: formatLabel(key),
+    const contributions: Contribution[] = [
+        ...Object.entries(dominant).map(([name, value]) => ({
+            name,
             value,
             type: "dominant" as const,
         })),
-        ...Object.entries(additive).map(([key, value]) => ({
-            name: formatLabel(key),
+        ...Object.entries(additive).map(([name, value]) => ({
+            name,
             value,
             type: "additive" as const,
         })),
-    ];
+    ]
+        .filter((item) => item.value > 0)
+        .sort((left, right) => right.value - left.value);
 
-    // Sort by value descending
-    data.sort((a, b) => b.value - a.value);
+    const total = contributions.reduce((sum, item) => sum + item.value, 0);
 
-    if (data.length === 0) {
+    if (contributions.length === 0 || total <= 0) {
         return (
-            <div className={clsx("text-sm font-mono text-muted-foreground/50 text-center py-4", className)}>
-                No risk breakdown data
+            <div className={clsx("rounded-xl border border-white/8 bg-white/[0.02] px-4 py-5 text-sm text-muted-foreground", className)}>
+                No material risk contributors in this dimension.
             </div>
         );
     }
 
     return (
-        <div className={clsx("w-full", className)}>
-            <div className="flex items-center gap-4 mb-3">
-                <div className="flex items-center gap-1.5">
-                    <div className="size-2.5 rounded-sm" style={{ backgroundColor: DOMINANT_COLOR }} />
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                        Dominant
-                    </span>
+        <div className={clsx("space-y-4", className)}>
+            <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
+                <div className="flex items-center gap-2">
+                    <span className="size-2.5 rounded-full bg-amber-400" />
+                    Primary Causes
                 </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="size-2.5 rounded-sm" style={{ backgroundColor: ADDITIVE_COLOR }} />
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                        Additive
-                    </span>
+                <div className="flex items-center gap-2">
+                    <span className="size-2.5 rounded-full bg-indigo-400" />
+                    Contributing Factors
                 </div>
             </div>
 
-            <ResponsiveContainer width="100%" height={data.length * 40 + 20}>
-                <BarChart
-                    data={data}
-                    layout="vertical"
-                    margin={{ top: 0, right: 10, bottom: 0, left: 0 }}
-                    barSize={16}
-                >
-                    <XAxis
-                        type="number"
-                        domain={[0, 1]}
-                        tick={{ fontSize: 10, fontFamily: "JetBrains Mono", fill: "#64748b" }}
-                        tickLine={false}
-                        axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
-                    />
-                    <YAxis
-                        type="category"
-                        dataKey="name"
-                        tick={{ fontSize: 11, fontFamily: "JetBrains Mono", fill: "#94a3b8" }}
-                        tickLine={false}
-                        axisLine={false}
-                        width={90}
-                    />
-                    <RechartsTooltip
-                        content={<CustomTooltip />}
-                        cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                    />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                        {data.map((entry, index) => (
-                            <Cell
-                                key={`cell-${index}`}
-                                fill={entry.type === "dominant" ? DOMINANT_COLOR : ADDITIVE_COLOR}
-                                fillOpacity={0.8}
+            <div className="overflow-hidden rounded-2xl border border-white/8 bg-black/20">
+                <div className="flex min-h-12 w-full">
+                    {contributions.map((item) => {
+                        const width = Math.max((item.value / total) * 100, 12);
+                        return (
+                            <div
+                                key={`${item.type}-${item.name}`}
+                                className="flex items-center justify-center px-3 py-3 text-center text-[11px] font-mono text-white/90"
+                                style={{
+                                    width: `${width}%`,
+                                    background: item.type === "dominant" ? DOMINANT_COLOR : ADDITIVE_COLOR,
+                                }}
+                                title={`${formatRiskName(item.name)}: ${formatRiskValue(item.value)}`}
+                            >
+                                <span className="line-clamp-2">
+                                    {formatRiskName(item.name)}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="grid gap-2">
+                {contributions.map((item) => (
+                    <div
+                        key={`legend-${item.type}-${item.name}`}
+                        className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2"
+                    >
+                        <div className="flex items-center gap-2">
+                            <span
+                                className="size-2.5 rounded-full"
+                                style={{
+                                    background: item.type === "dominant" ? "#fbbf24" : "#818cf8",
+                                }}
                             />
-                        ))}
-                    </Bar>
-                </BarChart>
-            </ResponsiveContainer>
+                            <span className="text-sm text-foreground">
+                                {formatRiskName(item.name)}
+                            </span>
+                        </div>
+                        <span className="text-sm font-mono text-muted-foreground">
+                            {formatRiskValue(item.value)}
+                        </span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

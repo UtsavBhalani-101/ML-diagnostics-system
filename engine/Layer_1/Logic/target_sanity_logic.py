@@ -3,13 +3,10 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-# ------------------ LOGGING ------------------
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger('ml_diag')
+logger = logging.getLogger("ml_diag")
 
-
-# ------------------ STRUCTURE ------------------
 
 @dataclass(frozen=True)
 class TestResult:
@@ -23,151 +20,111 @@ class TestResult:
 
 DIMENSION = "target_viability"
 
-# ------------------ VALIDATION ------------------
 
 def validate_target_signals(signals: dict):
-
-    required = [
-        "target_missing_ratio",
-        "target_unique_count"
-    ]
+    required = ["target_missing_ratio", "target_unique_count"]
 
     for key in required:
         if key not in signals:
             raise ValueError(f"Missing target signal: {key}")
 
-    # Range checks
-    r = signals["target_missing_ratio"]
-    if not (0.0 <= r <= 1.0):
+    missing_ratio = signals["target_missing_ratio"]
+    if not (0.0 <= missing_ratio <= 1.0):
         raise ValueError("target_missing_ratio must be between 0 and 1")
 
-    u = signals["target_unique_count"]
-    if u < 0:
+    unique_count = signals["target_unique_count"]
+    if unique_count < 0:
         raise ValueError("target_unique_count must be >= 0")
 
-    # Logical consistency
-    if r == 1.0 and u > 0:
+    if missing_ratio == 1.0 and unique_count > 0:
         raise ValueError("Inconsistent: all target missing but unique_count > 0")
 
-# ------------------ HARD FAILURES ------------------
 
 def check_target_hard_fail(signals):
-
-    # All missing
-    logger.info(f"Checking target missing...")
-
+    logger.info("Checking target missing")
     if signals["target_missing_ratio"] == 1.0:
         return TestResult(
             dimension=DIMENSION,
             name="target_missing",
             status="CRITICAL",
             reason="Target is completely missing",
-            risk=1.0
+            risk=1.0,
         )
 
-    # Single class / zero variance
-    logger.info(f"Checking variance...")
-
+    logger.info("Checking target variance")
     if signals["target_unique_count"] <= 1:
         return TestResult(
             dimension=DIMENSION,
             name="target_variance",
             status="CRITICAL",
-            reason="Target has no variability; nothing to predict",
-            risk=1.0
+            reason="Target has no variability; nothing can be learned",
+            risk=1.0,
         )
 
-    # Mixed types
-    logger.info(f"Checking mixed types...")
-
+    logger.info("Checking target mixed types")
     if signals.get("target_mixed_type", False):
         return TestResult(
             dimension=DIMENSION,
             name="target_mixed_type",
             status="CRITICAL",
-            reason="Target has mixed types; ambiguous label definition",
-            risk=1.0
+            reason="Target has mixed types; label semantics are ambiguous",
+            risk=1.0,
         )
 
     return None
 
 
-# ------------------ RISK FUNCTIONS ------------------
-
 def missing_risk(signals):
-    r = signals["target_missing_ratio"]
-
-    logger.info(f"Computing missing_risk: {r}")
-    return min(r / 0.3, 1.0)
+    missing_ratio = signals["target_missing_ratio"]
+    logger.info(f"Computing target missing risk: {missing_ratio}")
+    return min(missing_ratio / 0.3, 1.0)
 
 
 def imbalance_risk(signals):
-    r = signals.get("class_imbalance_score", 0)
-
-    logger.info(f"Computing imbalance_risk: {r}")
-    return min((r - 0.5) / 0.5, 1.0) if r > 0.5 else 0.0
+    imbalance_score = signals.get("class_imbalance_score", 0)
+    logger.info(f"Computing target imbalance risk: {imbalance_score}")
+    return min((imbalance_score - 0.5) / 0.5, 1.0) if imbalance_score > 0.5 else 0.0
 
 
 def variance_risk(signals):
-    var = signals.get("target_variance")
-    logger.info(f"Computing variance_risk: {var}")
+    variance = signals.get("target_variance")
+    logger.info(f"Computing target variance risk: {variance}")
 
-    if var is None:
+    if variance is None:
         return 0.0
 
-    # Smooth decay instead of hard steps
-    risk = np.exp(-var * 1000)  # higher variance → lower risk
+    risk = np.exp(-variance * 1000)
     return min(risk, 1.0)
 
 
 def task_uncertainty_risk(signals):
-    conf = signals.get("task_confidence", 1.0)
+    confidence = signals.get("task_confidence", 1.0)
+    logger.info(f"Computing task uncertainty risk: {confidence}")
 
-    logger.info(f"Computing task_uncertainty_risk: {conf}")
-
-    risk = (1 - conf) ** 2
-
-    if conf < 0.5:
-        risk += 0.3  # strong penalty for ambiguity
+    risk = (1 - confidence) ** 2
+    if confidence < 0.5:
+        risk += 0.3
 
     return min(risk, 1.0)
 
 
-# ------------------ AGGREGATION ------------------
-
 def aggregate_risk(signals):
-
-    # -------------------------
-    # DOMINANT RISKS
-    # -------------------------
     dominant_risks = {
-        "task_uncertainty": task_uncertainty_risk(signals)
+        "task_uncertainty": task_uncertainty_risk(signals),
     }
 
-    # -------------------------
-    # ADDITIVE RISKS
-    # -------------------------
     additive_risks = {
         "missing": missing_risk(signals),
         "imbalance": imbalance_risk(signals),
-        "variance": variance_risk(signals)
+        "variance": variance_risk(signals),
     }
 
-    # -------------------------
-    # COMPUTE ADDITIVE
-    # -------------------------
     additive_values = list(additive_risks.values())
     additive_total = sum(additive_values) / len(additive_values) if additive_values else 0.0
 
-    # -------------------------
-    # COMPUTE DOMINANT
-    # -------------------------
     dominant_values = list(dominant_risks.values())
     dominant_max = max(dominant_values) if dominant_values else 0.0
 
-    # -------------------------
-    # FINAL RISK
-    # -------------------------
     total_risk = max(additive_total, dominant_max)
 
     logger.info(
@@ -176,12 +133,12 @@ def aggregate_risk(signals):
         f"total={total_risk:.3f}"
     )
 
-    # -------------------------
-    # SORTED BREAKDOWN (IMPORTANT)
-    # -------------------------
-    all_risks = {**dominant_risks, **additive_risks}
     sorted_risks = dict(
-        sorted(all_risks.items(), key=lambda x: x[1], reverse=True)
+        sorted(
+            {**dominant_risks, **additive_risks}.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
     )
 
     return total_risk, {
@@ -189,40 +146,29 @@ def aggregate_risk(signals):
         "additive": additive_risks,
         "sorted_contributors": sorted_risks,
         "additive_total": additive_total,
-        "dominant_max": dominant_max
+        "dominant_max": dominant_max,
     }
 
 
-# ------------------ FINAL DECISION ------------------
-
 def decision_from_risk(total_risk):
-    
-    logger.info(f"Deciding a label based on risk")
+    logger.info("Deciding target viability status from risk")
 
     if total_risk < 0.3:
-        return "SAFE", "Target is usable"
-    elif total_risk < 0.7:
-        return "WARNING", "Target has potential issues"
-    else:
-        return "CRITICAL", "Target is unreliable for learning"
+        return "SAFE", "Missingness, balance, and variability are within acceptable range. Low structural risk."
+    if total_risk < 0.7:
+        return "WARNING", "The target shows moderate structural weakness and should be reviewed."
+    return "CRITICAL", "The target is structurally unreliable for supervised learning."
 
-
-# ------------------ MAIN ------------------
 
 def run_target_viability(signals):
-
     validate_target_signals(signals)
 
     try:
-        # 1. Hard fail
-        hard = check_target_hard_fail(signals)
-        if hard:
-            return hard
+        hard_fail = check_target_hard_fail(signals)
+        if hard_fail:
+            return hard_fail
 
-        # 2. Aggregate
         total_risk, breakdown = aggregate_risk(signals)
-
-        # 3. Decide
         status, reason = decision_from_risk(total_risk)
 
         return TestResult(
@@ -233,17 +179,12 @@ def run_target_viability(signals):
             risk=round(total_risk, 3),
             metrics={
                 "total_risk": total_risk,
-                "risk_breakdown": breakdown
-            }
+                "risk_breakdown": breakdown,
+            },
         )
-        
     except Exception as e:
         logger.error(
-            f"Signal failed: {signals.__name__}",
-            extra={"signal": signals.__name__, "error": str(e)}
+            "Signal evaluation failed for target viability",
+            extra={"error": str(e)},
         )
-        
-# ------------------ Entry ------------------
-
-if __name__ == "__main__":
-    run_target_viability(signals)
+        raise

@@ -7,7 +7,7 @@ import json
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from typing import Optional, Any, List
 
 from Backend.file_support_check import validate_and_load, get_supported_extensions, load_dataframe_from_file
@@ -71,13 +71,51 @@ class ErrorResponse(BaseModel):
     detail: str = Field(..., description="Error message")
 
 
+class PrimaryIssueResponse(BaseModel):
+    """Primary issue extracted from dominant risks."""
+    name: str = Field(..., description="Risk name")
+    risk: float = Field(..., description="Risk contribution for this issue")
+    action: str = Field(..., description="Mapped next action for investigation")
+
+
+class DimensionBreakdownResponse(BaseModel):
+    """Risk breakdown for a single dimension."""
+    dominant: dict[str, float] = Field(..., description="Primary causes that should not be diluted")
+    additive: dict[str, float] = Field(..., description="Contributing factors that combine into risk")
+
+
+class DimensionResultResponse(BaseModel):
+    """Frontend-facing Layer 1 dimension output."""
+    status: str = Field(..., description="Dimension status label")
+    risk: float = Field(..., description="Dimension total risk score")
+    breakdown: DimensionBreakdownResponse = Field(..., description="Risk contribution breakdown")
+    signals: dict[str, Any] = Field(..., description="Signals for this dimension")
+    primary_issues: List[PrimaryIssueResponse] = Field(..., description="Top dominant issues with mapped actions")
+    interpretation: str = Field(..., description="Short explanation of the dimension state")
+
+
+class OverallRiskResponse(BaseModel):
+    """Overall Layer 1 risk summary."""
+    status: str = Field(..., description="Worst status across all dimensions")
+    risk: float = Field(..., description="Overall risk score")
+    primary_failure_source: Optional[str] = Field(None, description="Highest-risk dimension key")
+    failing_dimensions: int = Field(..., description="Number of dimensions currently not SAFE")
+    total_dimensions: int = Field(..., description="Total number of evaluated dimensions")
+
+
+class Layer1FinalOutputResponse(BaseModel):
+    """Formatted Layer 1 payload used by the frontend."""
+    overall: OverallRiskResponse = Field(..., description="Overall Layer 1 structural risk summary")
+    dimensions: dict[str, DimensionResultResponse] = Field(..., description="Dimension-level structural risk outputs")
+
+
 class Layer1OutputResponse(BaseModel):
     """Output schema for Layer 1 pipeline results."""
     data_loaded: bool = Field(..., description="Whether the data was successfully loaded")
     shape: list[int] = Field(..., description="Shape of the dataset [rows, columns]")
     signals: dict[str, Any] = Field(..., description="Signal metrics from Layer 1 analysis")
     logic: dict[str, Any] = Field(..., description="Logic analysis results")
-    final_output: dict[str, Any] = Field(..., description="Formatted output for frontend display")
+    final_output: Layer1FinalOutputResponse = Field(..., description="Formatted output for frontend display")
     status: str = Field(..., description="Status of the pipeline execution")
 
 
@@ -315,8 +353,15 @@ async def get_layer1_output() -> Layer1OutputResponse:
         
         with open(LAYER1_OUTPUT_PATH, "r", encoding="utf-8") as f:
             output_data = json.load(f)
-        
-        return Layer1OutputResponse(**output_data)
+
+        try:
+            return Layer1OutputResponse(**output_data)
+        except ValidationError:
+            file_path = os.path.join(UPLOAD_DIR, _valid_file_uploaded["filename"])
+            refreshed_output = run_pipeline(file_path)
+            with open(LAYER1_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                json.dump(refreshed_output, f, indent=4, default=str)
+            return Layer1OutputResponse(**refreshed_output)
     except json.JSONDecodeError as e:
         raise HTTPException(
             status_code=500,

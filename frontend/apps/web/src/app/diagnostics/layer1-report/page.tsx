@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { Activity, Database, HardDrive, BarChart3 } from "lucide-react";
@@ -12,12 +12,15 @@ import { DimensionCard } from "@/components/diagnostics/dimension-card";
 
 type PageState = "loading" | "empty" | "ready" | "error";
 
-// ── Dimension display name mapping ──
-const DIMENSION_ORDER: Array<{ key: string; label: string }> = [
+const DIMENSION_ORDER: Array<{ key: keyof Layer1FinalOutput["dimensions"]; label: string }> = [
     { key: "data_integrity", label: "Data Integrity" },
     { key: "target_viability", label: "Target Viability" },
     { key: "sample_adequacy", label: "Sample Adequacy" },
 ];
+
+function getDimensionLabel(key: string | null): string {
+    return DIMENSION_ORDER.find((dimension) => dimension.key === key)?.label ?? "No failing dimension";
+}
 
 export default function Layer1ReportPage() {
     const [pageState, setPageState] = useState<PageState>("loading");
@@ -29,89 +32,89 @@ export default function Layer1ReportPage() {
             try {
                 const response = await getLayer1Output();
                 const output = response?.final_output;
-                if (!output || !output.overall) {
+
+                if (!output?.overall) {
                     setPageState("empty");
                     return;
                 }
+
                 setData(output);
-
-                // Extract key facts from logic.facts
-                const keyFacts = response?.logic?.facts;
-                if (keyFacts) setFacts(keyFacts);
-
+                if (response?.logic?.facts) {
+                    setFacts(response.logic.facts);
+                }
                 setPageState("ready");
             } catch {
                 setPageState("empty");
             }
         }
+
         fetchData();
     }, []);
 
-    // Sort dimensions by risk severity (highest first)
-    const sortedDimensions = useMemo(() => {
-        if (!data?.dimensions) return [];
-        return DIMENSION_ORDER
+    const sortedDimensions = data
+        ? DIMENSION_ORDER
             .map(({ key }) => ({
                 key,
-                dimension: (data.dimensions as Record<string, DimensionResult>)[key],
+                dimension: data.dimensions[key] as DimensionResult,
             }))
-            .filter((d) => d.dimension != null)
-            .sort((a, b) => b.dimension.risk - a.dimension.risk);
-    }, [data]);
+            .filter((entry) => entry.dimension != null)
+            .sort((left, right) => right.dimension.risk - left.dimension.risk)
+        : [];
 
-    // ── Loading ──
     if (pageState === "loading") {
         return (
-            <main className="flex-grow flex items-center justify-center min-h-[calc(100vh-8rem)]">
-                <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+            <main className="flex min-h-[calc(100vh-8rem)] flex-grow items-center justify-center">
+                <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
                 <div className="relative z-10 flex flex-col items-center gap-4">
-                    <div className="size-12 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                    <p className="text-muted-foreground font-mono text-sm tracking-wide">
-                        Loading structural risk assessment…
+                    <div className="size-12 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                    <p className="text-sm font-mono tracking-wide text-muted-foreground">
+                        Loading structural risk assessment...
                     </p>
                 </div>
             </main>
         );
     }
 
-    // ── Empty / Error ──
     if (pageState === "empty" || !data) {
         return (
-            <main className="flex-grow flex items-center justify-center min-h-[calc(100vh-8rem)]">
-                <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
-                <div className="relative z-10 flex flex-col items-center gap-6 text-center px-6">
-                    <div className="size-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+            <main className="flex min-h-[calc(100vh-8rem)] flex-grow items-center justify-center">
+                <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
+                <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center">
+                    <div className="flex size-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
                         <Activity className="size-8 text-muted-foreground" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-semibold mb-2">No diagnostics report available.</h2>
-                        <p className="text-muted-foreground font-mono text-sm">
+                        <h2 className="mb-2 text-xl font-semibold">No diagnostics report available.</h2>
+                        <p className="text-sm font-mono text-muted-foreground">
                             Please run Layer 1 analysis first.
                         </p>
                     </div>
                     <Link
                         href={"/diagnostics" as Route}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
                     >
-                        ← Back to Diagnostics
+                        Back to Diagnostics
                     </Link>
                 </div>
             </main>
         );
     }
 
-    return (
-        <main className="flex-grow flex flex-col relative min-h-[calc(100vh-8rem)]">
-            <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+    const primaryFailureSource = getDimensionLabel(data.overall.primary_failure_source);
+    const hasPrimaryFailure = Boolean(data.overall.primary_failure_source);
+    const failingDimensionsText = `${data.overall.failing_dimensions} of ${data.overall.total_dimensions} dimensions failing`;
 
-            <section className="relative z-10 w-full max-w-6xl mx-auto py-14 px-6 md:px-8 flex flex-col gap-10">
-                {/* ── Breadcrumb ── */}
+    return (
+        <main className="relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
+            <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
+
+            <section className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-14 md:px-8">
                 <div className="flex items-center gap-3">
                     <Link
                         href={"/diagnostics" as Route}
-                        className="text-muted-foreground hover:text-foreground transition-colors text-base font-mono"
+                        className="text-base font-mono text-muted-foreground transition-colors hover:text-foreground"
                     >
-                        ← Diagnostics
+                        Diagnostics
                     </Link>
                     <span className="text-muted-foreground/40">/</span>
                     <span className="text-base font-mono text-foreground">
@@ -119,48 +122,55 @@ export default function Layer1ReportPage() {
                     </span>
                 </div>
 
-                {/* ── Layer Context ── */}
                 <div>
-                    <p className="text-base font-semibold font-mono tracking-wide text-muted-foreground">
-                        Layer 1 — Structural Risk Assessment
+                    <p className="text-base font-mono font-semibold tracking-wide text-muted-foreground">
+                        Layer 1 - Structural Risk Assessment
                     </p>
-                    <p className="text-sm font-mono text-muted-foreground/75 mt-0.5">
-                        Pre-model data quality evaluation across 3 structural dimensions.
+                    <p className="mt-0.5 text-sm font-mono text-muted-foreground/75">
+                        Signal to risk to aggregation to decision across three structural dimensions.
                     </p>
                 </div>
 
-                {/* ══════════════════════════════════════════════
-                    1. HERO SECTION — Overall Risk
-                ══════════════════════════════════════════════ */}
-                <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-8 md:p-10 flex flex-col items-center">
-                    <h2 className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-6">
-                        Overall Data Risk
-                    </h2>
+                <div className="rounded-xl border border-white/[0.06] bg-card/60 p-8 backdrop-blur md:p-10">
+                    <div className="flex flex-col items-center">
+                        <h2 className="mb-6 text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                            Overall Structural Risk
+                        </h2>
 
-                    <RiskGauge
-                        risk={data.overall.risk}
-                        status={data.overall.status}
-                    />
-
-                    {/* Full-width risk bar */}
-                    <div className="w-full max-w-lg mt-8">
-                        <RiskBar
+                        <RiskGauge
                             risk={data.overall.risk}
-                            height="h-2.5"
-                            showMarker={true}
-                            showLabels={true}
+                            status={data.overall.status}
                         />
+
+                        <div className="mt-8 w-full max-w-lg">
+                            <RiskBar
+                                risk={data.overall.risk}
+                                height="h-2.5"
+                                showMarker={true}
+                                showLabels={true}
+                            />
+                        </div>
+
+                        <div className="mt-8 w-full max-w-3xl rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+                            <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                Primary Failure Source
+                            </p>
+                            <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                                {primaryFailureSource}
+                            </p>
+                            <p className="mt-3 text-sm text-muted-foreground">
+                                {hasPrimaryFailure
+                                    ? `Driven by ${primaryFailureSource}. ${failingDimensionsText}.`
+                                    : `No failing dimension detected. All ${data.overall.total_dimensions} dimensions are currently safe.`}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                {/* ══════════════════════════════════════════════
-                    2. DATA OVERVIEW (Key Facts)
-                ══════════════════════════════════════════════ */}
                 {facts && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {/* Dataset Dimensions */}
-                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
-                            <div className="flex items-center gap-2 mb-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 p-5 backdrop-blur">
+                            <div className="mb-4 flex items-center gap-2">
                                 <Database className="size-4 text-primary" />
                                 <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
                                     Dataset
@@ -174,9 +184,8 @@ export default function Layer1ReportPage() {
                             </div>
                         </div>
 
-                        {/* Memory */}
-                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
-                            <div className="flex items-center gap-2 mb-4">
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 p-5 backdrop-blur">
+                            <div className="mb-4 flex items-center gap-2">
                                 <HardDrive className="size-4 text-primary" />
                                 <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
                                     Memory
@@ -188,9 +197,8 @@ export default function Layer1ReportPage() {
                             </div>
                         </div>
 
-                        {/* Feature Mix */}
-                        <div className="rounded-xl border border-white/[0.06] bg-card/60 backdrop-blur p-5">
-                            <div className="flex items-center gap-2 mb-4">
+                        <div className="rounded-xl border border-white/[0.06] bg-card/60 p-5 backdrop-blur">
+                            <div className="mb-4 flex items-center gap-2">
                                 <BarChart3 className="size-4 text-primary" />
                                 <h3 className="text-xs font-mono font-semibold uppercase tracking-widest text-muted-foreground">
                                     Feature Mix
@@ -205,15 +213,9 @@ export default function Layer1ReportPage() {
                     </div>
                 )}
 
-                {/* ══════════════════════════════════════════════
-                    3. DIMENSION CARDS
-                ══════════════════════════════════════════════ */}
                 <div>
-                    <h2 className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-5">
+                    <h2 className="mb-5 text-xs font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                         Structural Dimensions
-                        <span className="text-muted-foreground/40 ml-2">
-                            — sorted by risk severity
-                        </span>
                     </h2>
 
                     <div className="space-y-4">
@@ -228,18 +230,15 @@ export default function Layer1ReportPage() {
                     </div>
                 </div>
 
-                {/* Bottom spacer */}
                 <div className="h-8" />
             </section>
         </main>
     );
 }
 
-/* ──────────────────── Sub-component ──────────────────── */
-
 function FactRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
             <span className="text-muted-foreground">{label}</span>
             <span className="font-medium text-foreground">{value}</span>
         </div>

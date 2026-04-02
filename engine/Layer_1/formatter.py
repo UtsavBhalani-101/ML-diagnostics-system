@@ -10,7 +10,15 @@ logger = logging.getLogger(__name__)
 # VALIDATION
 # -------------------------
 def _validate_dimension(name: str, dim: Dict[str, Any]):
-    required = ["signals", "dominant_risks", "additive_risks", "total_risk", "status"]
+    required = [
+        "signals",
+        "dominant_risks",
+        "additive_risks",
+        "total_risk",
+        "status",
+        "primary_issues",
+        "interpretation",
+    ]
 
     for key in required:
         if key not in dim:
@@ -29,6 +37,8 @@ def _format_dimension(name: str, dim: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "status": dim["status"],
         "risk": dim["total_risk"],
+        "primary_issues": dim["primary_issues"],
+        "interpretation": dim["interpretation"],
 
         # WHY layer
         "breakdown": {
@@ -47,10 +57,21 @@ def _format_dimension(name: str, dim: Dict[str, Any]) -> Dict[str, Any]:
 def _compute_overall(dimensions: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     risks = [d["risk"] for d in dimensions.values()]
     statuses = [d["status"] for d in dimensions.values()]
+    ranked_dimensions = sorted(
+        dimensions.items(),
+        key=lambda item: item[1]["risk"],
+        reverse=True,
+    )
+    top_dimension_name = ranked_dimensions[0][0] if ranked_dimensions else None
+    top_dimension_risk = ranked_dimensions[0][1]["risk"] if ranked_dimensions else 0.0
+    failing_dimensions = sum(1 for d in dimensions.values() if d["status"] != "SAFE")
 
     overall = {
         "risk": max(risks) if risks else 0.0,
         "status": worst_status(statuses),
+        "primary_failure_source": top_dimension_name if top_dimension_risk > 0 else None,
+        "failing_dimensions": failing_dimensions,
+        "total_dimensions": len(dimensions),
     }
 
     logger.info(f"Overall computed: {overall}")
