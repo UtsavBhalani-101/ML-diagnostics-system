@@ -414,7 +414,7 @@ export function DimensionCard({
                             </div>
 
                             {dimension.status === "SAFE" && dimension.interpretation && (
-                                <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-50/90">
+                                <div className="rounded-xl border border-emerald-600/25 bg-emerald-500/12 px-4 py-3 text-sm leading-relaxed text-emerald-900 dark:border-emerald-500/15 dark:bg-emerald-500/8 dark:text-emerald-50/90">
                                     {dimension.interpretation}
                                 </div>
                             )}

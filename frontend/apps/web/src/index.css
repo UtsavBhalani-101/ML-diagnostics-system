@@ -9,18 +9,20 @@
 
 :root {
   --primary: #135bec;
-  --background-light: #f6f6f8;
+  --background-light: #f3f6fb;
   --background-dark: #000000;
   --charcoal: #000000;
   --surface: #0a0a0a;
 
   --background: var(--background-light);
-  --foreground: #0f172a;
+  --foreground: #0b1220;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: rgba(0, 0, 0, 0.05);
-  --muted: #64748b;
-  --muted-foreground: #64748b;
+  --card-foreground: #0b1220;
+  --secondary: #e7eefc;
+  --secondary-foreground: #10203d;
+  --border: rgba(15, 23, 42, 0.1);
+  --muted: #dbe4f1;
+  --muted-foreground: #475569;
   --ring: var(--primary);
   --radius: 0.25rem;
 }
@@ -30,6 +32,8 @@
   --foreground: #ffffff;
   --card: var(--surface);
   --card-foreground: #ffffff;
+  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.05);
   --muted: #94a3b8;
   --muted-foreground: #94a3b8;
@@ -44,6 +48,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
@@ -91,7 +97,7 @@ html {
     @apply border-border;
   }
 
-  body {
+body {
     @apply bg-background-light dark:bg-background-dark text-slate-900 dark:text-white antialiased overflow-x-hidden;
     font-family: "Space Grotesk", system-ui, sans-serif;
   }
@@ -103,6 +109,39 @@ html {
   ::selection {
     @apply bg-primary/30 text-white;
   }
+}
+
+html:not(.dark) .bg-card\/50 {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+html:not(.dark) .bg-card\/60 {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+html:not(.dark) .bg-card\/80 {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+html:not(.dark) .bg-secondary\/30 {
+  background-color: rgba(231, 238, 252, 0.72) !important;
+}
+
+html:not(.dark) .bg-secondary\/50 {
+  background-color: rgba(231, 238, 252, 0.84) !important;
+}
+
+html:not(.dark) .border-white\/\[0\.06\],
+html:not(.dark) .border-white\/8 {
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+html:not(.dark) .bg-white\/\[0\.02\] {
+  background-color: rgba(19, 91, 236, 0.035) !important;
+}
+
+html:not(.dark) .bg-white\/\[0\.03\] {
+  background-color: rgba(19, 91, 236, 0.05) !important;
 }
 
 /* Status Indicator Animation */
