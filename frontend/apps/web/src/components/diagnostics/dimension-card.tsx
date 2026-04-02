@@ -102,8 +102,11 @@ export function DimensionCard({
                 )}
             >
                 {/* ── Header ── */}
-                <button
+                <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setExpanded(!expanded)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}
                     className="w-full flex items-center gap-4 p-5 md:p-6 text-left cursor-pointer group"
                 >
                     {/* Icon */}
@@ -164,7 +167,7 @@ export function DimensionCard({
                             expanded && "rotate-180"
                         )}
                     />
-                </button>
+                </div>
 
                 {/* ── Expanded Content ── */}
                 <AnimatePresence initial={false}>
