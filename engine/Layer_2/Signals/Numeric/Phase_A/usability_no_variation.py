@@ -8,71 +8,188 @@ from typing import List, Optional, Dict
 class Signals:
     unique_ratio: float
     dominance_ratio: float
-    spread: float
+    resolution: float
+    entropy: float
+    low_sample: Optional[bool]
 
+@dataclass(frozen=True)
 class Result:
+    label: str
+    risk_score: float
+    reason: str
+    signals: Dict[str, float]
+
+def validate_data(col: pd.Series):
     pass
 
-def validate_data():
-    pass
 
-def get_signals(col: pd.Series):
-
-    if col.nunique() == 1:
-        return Signals (0.0, 1.0, 0.0)
+# ^ get entropy
+def get_entropy(col: pd.Series) -> dict:
+    probs = col.value_counts(normalize=True)
+    entropy =  -(probs * np.log2(probs + 1e-8)).sum()
+    
+    max_entropy = np.log2(len(col.unique()))
+    normalized_entropy = entropy / (max_entropy + 1e-8)
+    return {"entropy": normalized_entropy}
     
     
-    
 
-    range_ = max(col) - min(col)
+
+# ^ get resolution
+def get_resoluion(col: pd.Series) -> dict:
+    col = col.dropna()
+
+    if len(col) < 2:
+        return {"resolution": 0.0}
+
+    diffs = np.diff(np.sort(col))
+
+    # ignore zero diffs
+    diffs = diffs[diffs > 0]
+
+    if len(diffs) == 0:
+        return {"resolution": 0.0}
+
+    min_diff = np.min(diffs)
+    scale = np.abs(col.mean()) + 1e-8
+
+    return {"resolution":  float(min_diff / scale) }
+
+
+
+# ^ get basic signals 
+def get_basic_signals(col: pd.Series) -> dict:
+
+    col = col.dropna()
     n = col.shape[0]
+    low_sample = False
+
+    if n == 0:
+        return {
+            "unique_ratio" : 0.0,
+            "dominance_ratio": 0.0,
+            "low_sample": False
+        }
+        
+    if n < 5:
+        low_sample = True
+        
+    #  Constant gate
+    if col.nunique() == 1: 
+        return {
+            "unique_ratio" : 0.0,
+            "dominance_ratio": 1.0,
+            "low_sample": False
+        }
+
+    range_ = col.max() - col.min()
 
     unique_ratio = col.nunique() / n
-    
     dominance_ratio = col.value_counts().max() / n
+
+    return {
+        "unique_ratio": unique_ratio,
+        "dominance_ratio": dominance_ratio,
+        "low_sample" : low_sample
+    }
+
+
+
+SIGNAL_REGISTRY = [
+    get_basic_signals,
+    get_entropy,
+    get_resoluion
+]
+
+
+
+# * aggregation signals
+def build_signals(col: pd.Series) -> Signals:
+    combined = {}
     
-    q75 = np.percentile(col, 75)
-    q25 = np.percentile(col, 25)
-    iqr = q75 - q25
+    for fn in SIGNAL_REGISTRY:
+        result = fn(col)
+        if result:
+            combined.update(result)
+            
+    return Signals(**combined)
 
-    spread = iqr / (range_ + 1e-8)
-        
-    return Signals(
-        unique_ratio=unique_ratio,
-        dominance_ratio=dominance_ratio,
-        spread=spread
-    )
 
+
+
+# * logic
 def infer_signals(signals: Signals):
     ur = signals.unique_ratio
     dr = signals.dominance_ratio
-    sp = signals.spread
+    res = signals.resolution
+    nr = signals.entropy
+    low_sample = signals.low_sample
 
+    risk = 0.0
     reasons = []
 
-    variation_score = (ur + (1 - dr) + sp) / 3
+    high_dr = dr > 0.75
+    moderate_dr = dr > 0.55
 
-    if ur < 0.1:
-        reasons.append(f"low unique ratio ({ur:.2f})")
+    low_ur = ur < 0.3
 
-    if dr > 0.9:
-        reasons.append(f"high dominance ({dr:.2f})")
+    low_entropy = nr < 0.3
 
-    if sp < 0.1:
-        reasons.append(f"low spread ({sp:.2f})")
+    low_res = res < 0.1
+    very_low_res = res < 0.01
 
-    # Label
-    if variation_score < 0.2:
+    if low_sample:
         label = "CRITICAL"
-    elif variation_score < 0.4:
+        reasons.append("sample count is too low")
+
+    if high_dr or very_low_res:
+        label = "CRITICAL"
+        if high_dr:
+            reasons.append("high dominance")
+        if very_low_res:
+            reasons.append("very low spread")
+
+    elif moderate_dr:
         label = "WARNING"
+        reasons.append("moderate dominance")
+
+    elif low_entropy:
+        label = "WARNING"
+        reasons.append("low entropy")
+
+    elif low_res or low_ur or (low_ur and low_res):
+        label = "WARNING"
+        if low_res:
+            reasons.append("low spread")
+        if low_ur:
+            reasons.append("low unique values")
+
     else:
         label = "SAFE"
+        reasons.append("no problems")
 
-    return {
-        "variation_score": variation_score,
-        "label": label,
-        "reasons": reasons,
-        "signals": signals
-    }
+
+    return Result(
+        label=label,
+        risk_score=risk,
+        reason="; ".join(reasons),
+        signals={
+            "unique_ratio": ur,
+            "dominance_ratio": dr,
+            "resolution": res,
+            "entropy": nr
+        },
+    )
     
+    
+def run_usability_no_variation():
+    # Example
+    # col = pd.Series([5,5,5,5,5,5])
+
+    combined_signals = build_signals(col)
+    infer_signals(combined_signals)
+    
+
+
+if __name__ == "__main__":
+    run_usability_no_variation()
