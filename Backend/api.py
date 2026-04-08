@@ -1,7 +1,6 @@
 """
 FastAPI backend for ML Diagnostics.
 """
-import json
 import os
 import re
 import pandas as pd
@@ -10,11 +9,12 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from Backend.file_support_check import (
     get_supported_extensions,
     validate_and_load,
+    _load_dataframe_by_extension
 )
 from engine.Layer_1.pipeline import run_pipeline_from_df
 
@@ -22,7 +22,6 @@ from engine.Layer_1.pipeline import run_pipeline_from_df
 RESULTS_DIR = "results"
 os.makedirs(os.path.join(RESULTS_DIR, "layer_1"), exist_ok=True)
 
-LAYER1_OUTPUT_PATH = os.path.join(RESULTS_DIR, "layer_1", "output.json")
 
 DOCS_PAYLOAD = {
     "overview": (
@@ -94,7 +93,6 @@ class FileValidationResponse(BaseModel):
     is_valid: bool = Field(..., description="Whether the file is valid and supported")
     filename: str = Field(..., description="Name of the uploaded file")
     extension: str = Field(..., description="File extension detected")
-    saved: bool = Field(False, description="Whether the file was saved to uploads folder")
     error: Optional[str] = Field(None, description="Error message if validation failed")
 
 
@@ -212,6 +210,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _validate_file_or_raise(content: bytes, filename: str):
+    validation_result = validate_and_load(content, filename)
+    if not validation_result["is_valid"]:
+        raise HTTPException(
+            status_code=400,
+            detail=validation_result["error"] or "Invalid dataset file."
+        )
+
 
 def _safe_filename(filename: str) -> str:
     safe_name = os.path.basename(filename or "").strip()
@@ -234,12 +240,9 @@ async def _read_upload_bytes(file: UploadFile) -> tuple[str, bytes]:
 
 
 def load_dataframe_from_bytes(content: bytes, filename: str) -> pd.DataFrame:
-    if filename.endswith(".csv"):
-        return pd.read_csv(io.BytesIO(content))
-    elif filename.endswith(".xlsx"):
-        return pd.read_excel(io.BytesIO(content))
-    else:
-        raise ValueError("Unsupported file type")
+    source = io.BytesIO(content)
+    extension = os.path.splitext(filename)[1].lower()
+    return _load_dataframe_by_extension(source, extension)
 
 
 def _resolve_target_column(columns: list[str], requested_target: Optional[str]) -> Optional[str]:
@@ -263,22 +266,6 @@ def _resolve_target_column(columns: list[str], requested_target: Optional[str]) 
         detail=f"Target column '{cleaned_target}' was not found in the uploaded dataset.",
     )
 
-
-def _execute_pipeline(df: pd.DataFrame, target_column: Optional[str] = None) -> Layer1OutputResponse:
-    pipeline_result = run_pipeline_from_df(df, target_column=target_column)
-    if pipeline_result.get("status") != "success":
-        raise HTTPException(
-            status_code=500,
-            detail=f"Pipeline execution failed: {pipeline_result.get('message', 'Unknown error')}",
-        )
-
-    if isinstance(pipeline_result.get("shape"), tuple):
-        pipeline_result["shape"] = list(pipeline_result["shape"])
-
-    try:
-        return Layer1OutputResponse(**pipeline_result)
-    except ValidationError as exc:
-        raise HTTPException(status_code=500, detail=f"Pipeline output validation failed: {exc}") from exc
 
 
 @app.post(
@@ -315,7 +302,7 @@ async def validate_file(file: UploadFile = File(...)) -> FileValidationResponse:
         )
 
     # 3. Return validation response
-    return FileValidationResponse(**validation_result, saved=False)
+    return FileValidationResponse(**validation_result)
 
 
 @app.get(
@@ -387,34 +374,12 @@ async def run_diagnostics(
     target_column: Optional[str] = Form(default=None),
 ) -> Layer1OutputResponse:
     filename, content = await _read_upload_bytes(file)
+    _validate_file_or_raise(content, filename)
     df = load_dataframe_from_bytes(content, filename)
     resolved_target = _resolve_target_column(df.columns.tolist(), target_column)
-    return _execute_pipeline(df, target_column=resolved_target)
+    result = run_pipeline_from_df(df, resolved_target)
+    return Layer1OutputResponse(**result)
 
-
-@app.get(
-    "/layer-1-output",
-    response_model=Layer1OutputResponse,
-    responses={
-        200: {"model": Layer1OutputResponse, "description": "Layer 1 pipeline results"},
-        404: {"model": ErrorResponse, "description": "Output file not found"},
-    },
-    summary="Get cached Layer 1 analysis output",
-    description="Returns the most recently saved Layer 1 analysis results from disk.",
-)
-async def get_layer1_output() -> Layer1OutputResponse:
-    if not os.path.exists(LAYER1_OUTPUT_PATH):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Layer 1 output file not found at: {LAYER1_OUTPUT_PATH}",
-        )
-
-    try:
-        return Layer1OutputResponse(**output_data)
-    except (json.JSONDecodeError, ValidationError) as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse Layer 1 output: {exc}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read Layer 1 output: {exc}") from exc
 
 
 @app.post(
@@ -431,6 +396,7 @@ async def get_dataset_columns(file: UploadFile = File(...)) -> DatasetColumnsRes
     filename, content = await _read_upload_bytes(file)
 
     try:
+        _validate_file_or_raise(content, filename)
         df = load_dataframe_from_bytes(content, filename)
         columns = df.columns.tolist()
         return DatasetColumnsResponse(
@@ -439,9 +405,10 @@ async def get_dataset_columns(file: UploadFile = File(...)) -> DatasetColumnsRes
             column_count=len(columns),
             suggested_target=columns[-1] if columns else "",
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read dataset columns: {exc}") from exc
-
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post(
     "/set-target-column",
@@ -461,6 +428,7 @@ async def set_target_column(
     filename, content = await _read_upload_bytes(file)
 
     try:
+        _validate_file_or_raise(content, filename)
         df = load_dataframe_from_bytes(content, filename)
         columns = df.columns.tolist()
         actual_target = _resolve_target_column(columns, target_column)
@@ -483,22 +451,3 @@ async def set_target_column(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to validate target column: {exc}") from exc
 
-
-@app.post(
-    "/run-analysis",
-    response_model=Layer1OutputResponse,
-    responses={
-        200: {"model": Layer1OutputResponse, "description": "Analysis completed successfully"},
-        400: {"model": ErrorResponse, "description": "Invalid file or target column"},
-    },
-    summary="Run Layer 1 analysis on uploaded file",
-    description="Accepts a file upload and optional target column, then runs the Layer 1 diagnostic pipeline.",
-)
-async def run_analysis(
-    file: UploadFile = File(...),
-    target_column: Optional[str] = Form(default=None),
-) -> Layer1OutputResponse:
-    filename, content = await _read_upload_bytes(file)
-    df = load_dataframe_from_bytes(content, filename)
-    resolved_target = _resolve_target_column(df.columns.tolist(), target_column)
-    return _execute_pipeline(df, target_column=resolved_target)
