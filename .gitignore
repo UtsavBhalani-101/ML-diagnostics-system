@@ -129,7 +129,6 @@ tests/
 
 # Layer 1 files
 engine/Layer_1/LAYER1_DOCS.md
-engine/Layer_1/risk_template.py
 
 
 # Layer 2 testing files
