@@ -74,31 +74,15 @@ The REST interface orchestrating the workflow.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/validate-file` | Upload and validate dataset |
-| `GET` | `/dataset-columns` | Retrieve dataset schema |
-| `POST` | `/set-target-column` | Validate target column |
-| `POST` | `/run-analysis` | Execute diagnostic pipeline |
-| `GET` | `/layer-1-output` | Retrieve diagnostic results |
+| `POST` | `/validate-file` | Upload and validate dataset (max 10 MB) |
+| `POST` | `/dataset-columns` | Upload file and get column names |
+| `POST` | `/set-target-column` | Upload file and validate a target column |
+| `POST` | `/api/diagnostics/run` | Upload dataset with target and run Layer 1 diagnostics |
+| `GET` | `/supported-extensions` | List supported file formats |
+| `GET` | `/api/docs` | Get product documentation content |
+| `GET` | `/api/models` | Get model-layer status |
 
-### 2. Session Engine (State Controller)
-
-The enforcement layer of the system.
-
-**Responsibilities:**
-
-- Forward-only state transitions
-- Dataset lifecycle management
-- Diagnostic report storage
-- Verdict synthesis
-- Session reset and memory wipe
-
-The session engine guarantees:
-
-- No step skipping
-- No duplicate uploads without reset
-- No modeling before diagnostics
-
-### 3. Diagnostic Engine
+### 2. Diagnostic Engine
 
 Diagnostics are organized into layers with defined scopes.
 
@@ -108,12 +92,9 @@ Performs dataset-level integrity analysis independent of target selection.
 
 **Evaluates:**
 
-- Dataset dimensionality and scale
-- Missingness patterns
-- Degenerate or near-constant features
-- Duplicate density
-- Structural anomalies
-- Risk classification across standardized categories
+- Data Integrity: missingness, duplicates, constant columns, hidden missing values, mixed types
+- Target Viability: missing labels, target variability, class imbalance, task inference
+- Sample Adequacy: sample-to-feature ratio, small-sample and overfitting risk
 
 Produces structured findings with severity:
 
@@ -187,16 +168,19 @@ This system prioritizes epistemic integrity over convenience.
 ```
 Backend/
   api.py
-  session_engine.py
-  states.py
   file_support_check.py
 
 engine/
   Layer_1/
+    Signals/
+    Logic/
+    pipeline.py
+    formatter.py
+    risk_template.py
   Layer_2/
 
 frontend/
-  Next.js application
+  Next.js application (apps/web/)
 
 uploads/
 results/
@@ -237,22 +221,21 @@ Frontend available at: `http://localhost:3001`
 ## Example Usage (API)
 
 ```bash
-# Upload file
+# Validate a file
 curl -X POST http://127.0.0.1:8000/validate-file -F "file=@data.csv"
 
-# Inspect columns
-curl http://127.0.0.1:8000/dataset-columns
+# Get columns from uploaded file
+curl -X POST http://127.0.0.1:8000/dataset-columns -F "file=@data.csv"
 
-# Set target
+# Validate target column
 curl -X POST http://127.0.0.1:8000/set-target-column \
-  -H "Content-Type: application/json" \
-  -d '{"target_column": "income"}'
+  -F "file=@data.csv" \
+  -F "target_column=income"
 
-# Run diagnostics
-curl -X POST http://127.0.0.1:8000/run-analysis
-
-# Retrieve results
-curl http://127.0.0.1:8000/layer-1-output
+# Run Layer 1 diagnostics
+curl -X POST http://127.0.0.1:8000/api/diagnostics/run \
+  -F "file=@data.csv" \
+  -F "target_column=income"
 ```
 
 ---

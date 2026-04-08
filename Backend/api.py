@@ -22,26 +22,31 @@ from engine.Layer_1.pipeline import run_pipeline_from_df
 RESULTS_DIR = "results"
 os.makedirs(os.path.join(RESULTS_DIR, "layer_1"), exist_ok=True)
 
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
 
 DOCS_PAYLOAD = {
     "overview": (
-        "Signal -> Risk -> Decision is the core philosophy of this system. "
+        "Signal → Risk → Decision is the core philosophy of this system. "
         "It exists to validate dataset structure before any model training begins, "
         "so teams can catch preventable failures early instead of discovering them "
-        "after spending time on experiments."
+        "after spending time on experiments. Upload a file, select a target column, "
+        "and the engine evaluates structural risk across three dimensions in a single request."
     ),
     "layers": {
         "layer_1": {
             "name": "Structural Risk",
             "purpose": (
                 "Layer 1 evaluates whether the dataset is structurally fit for modeling. "
-                "It inspects the raw table before feature engineering or model selection."
+                "It inspects the raw table before feature engineering or model selection. "
+                "Signals are extracted, converted into risk scores per dimension, and surfaced "
+                "as an overall risk gauge with per-dimension breakdowns."
             ),
             "dimensions": {
                 "data_integrity": (
                     "Checks whether the data is internally consistent and usable. "
-                    "This includes missingness, duplicates, constant columns, hidden missing values, "
-                    "and mixed-type fields."
+                    "This includes missingness ratios, duplicate density, constant columns, "
+                    "hidden missing values, and mixed-type fields."
                 ),
                 "target_viability": (
                     "Checks whether the selected target can support supervised learning. "
@@ -56,14 +61,17 @@ DOCS_PAYLOAD = {
             "outputs": {
                 "risk_score": "A 0 to 1 score where higher values indicate higher structural risk.",
                 "status": "SAFE, WARNING, or CRITICAL based on the evaluated risk level.",
-                "primary_causes": "The dominant issues driving the risk and most likely to block reliable modeling.",
-                "contributing_factors": "Secondary factors that add risk but are not the main failure source.",
-                "quick_actions": "Concrete first steps to reduce the highest-risk issues.",
+                "primary_causes": (
+                    "The dominant issues driving the risk, ranked by contribution. "
+                    "Each includes a risk value and a mapped action for investigation."
+                ),
+                "contributing_factors": "Secondary additive factors that combine into risk but are not the main failure source.",
+                "quick_actions": "Concrete first steps to reduce the highest-risk issues, derived from primary issue actions.",
             },
         },
         "layer_2": {
             "status": "coming_soon",
-            "message": "Layer 2 is currently being built. It is coming soon.",
+            "message": "Layer 2 (Feature-Level Diagnostics) is currently being built and is coming soon.",
         },
     },
     "interpretation": (
@@ -75,7 +83,8 @@ DOCS_PAYLOAD = {
     ),
     "limitations": (
         "This system is heuristic-based. It is not ground truth, it does not replace domain expertise, "
-        "and it still requires human judgment when deciding whether a dataset is acceptable for a specific use case."
+        "and it still requires human judgment when deciding whether a dataset is acceptable for a specific use case. "
+        "Maximum upload size is 10 MB."
     ),
 }
 
@@ -236,6 +245,12 @@ async def _read_upload_bytes(file: UploadFile) -> tuple[str, bytes]:
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum allowed size is {MAX_FILE_SIZE // (1024 * 1024)} MB.",
+        )
+
     return filename, content
 
 
@@ -321,24 +336,25 @@ async def home() -> dict[str, Any]:
         "message": "Welcome to ML Diagnostics API",
         "version": "1.0.0",
         "description": "API for validating and analyzing machine learning datasets",
+        "max_file_size_mb": MAX_FILE_SIZE // (1024 * 1024),
         "endpoints": {
             "GET /": "Home page",
             "GET /health": "Health check endpoint",
             "GET /docs": "Interactive API documentation (Swagger UI)",
             "GET /redoc": "Alternative API documentation (ReDoc)",
-            "POST /validate-file": "Upload and validate a data file",
+            "POST /validate-file": "Upload and validate a data file (max 10 MB)",
             "GET /supported-extensions": "List supported file formats",
-            "POST /dataset-columns": "Upload file and view its columns",
+            "POST /dataset-columns": "Upload file and get column names",
             "POST /set-target-column": "Upload file and validate a target column",
-            "POST /api/diagnostics/run": "Upload a dataset and run diagnostics in one request",
+            "POST /api/diagnostics/run": "Upload a dataset with target column and run Layer 1 diagnostics",
             "GET /api/docs": "Get product documentation content",
             "GET /api/models": "Get current model-layer status",
         },
         "workflow": [
-            "1. Upload a file using POST /validate-file",
-            "2. View available columns using POST /dataset-columns (send file)",
-            "3. Validate target column using POST /set-target-column (send file + target)",
-            "4. Run analysis using POST /api/diagnostics/run (send file + target)",
+            "1. Validate a file using POST /validate-file (file upload, multipart/form-data)",
+            "2. View available columns using POST /dataset-columns (file upload)",
+            "3. Validate target column using POST /set-target-column (file + target_column form field)",
+            "4. Run Layer 1 diagnostics using POST /api/diagnostics/run (file + optional target_column form field)",
         ],
     }
 
