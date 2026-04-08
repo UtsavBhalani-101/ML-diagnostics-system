@@ -84,8 +84,56 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
     }
 
 
+
 # -------------------------
-# MAIN PIPELINE
+# MAIN PIPELINE (WITHOUT FILEPATH)
+# -------------------------
+
+def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
+    try:
+        logger.info("Running signal extraction")
+        signal_output = signals.run_signal_extraction(df, target_column=target_column)
+
+        # 2. Facts
+        facts = compute_facts(df, signal_output)
+
+        # 3. Dimension Evaluations
+        logger.info("Evaluating dimensions")
+
+        dimensions = {
+            "data_integrity": logic.evaluate_data_integrity(signal_output),
+            "target_viability": logic.evaluate_target_viability(signal_output),
+            "sample_adequacy": logic.evaluate_sample_adequacy(signal_output),
+        }
+
+        result = {
+            "data_loaded": True,
+            "shape": df.shape,
+            "signals": signal_output,
+            "logic": {
+                "facts": facts,
+                "dimensions": dimensions,
+            }
+        }
+
+        result = convert_numpy_types(result)
+
+        final_output = format_final_output(result)
+        result["final_output"] = final_output
+        result["status"] = "success"
+
+        logger.info("Pipeline complete")
+
+        return result
+
+    except Exception as e:
+        logger.exception("Pipeline failed")
+        return {"status": "error", "message": str(e)}
+    
+
+
+# -------------------------
+# MAIN PIPELINE (WITH FILEPATH)
 # -------------------------
 def run_pipeline(file_path, target_column=None):
     try:
@@ -129,10 +177,13 @@ def run_pipeline(file_path, target_column=None):
         logger.info("Pipeline complete")
 
         return result
-
+    
     except Exception as e:
         logger.exception("Pipeline failed")
         return {"status": "error", "message": str(e)}
+    
+
+
 
 
 if __name__ == "__main__":

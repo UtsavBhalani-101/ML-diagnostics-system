@@ -4,6 +4,8 @@ FastAPI backend for ML Diagnostics.
 import json
 import os
 import re
+import pandas as pd
+import io
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -15,7 +17,7 @@ from Backend.file_support_check import (
     load_dataframe_from_file,
     validate_and_load,
 )
-from engine.Layer_1.pipeline import run_pipeline
+from engine.Layer_1.pipeline import run_pipeline, run_pipeline_from_df
 
 
 UPLOAD_DIR = "uploads"
@@ -252,6 +254,14 @@ async def _read_upload_bytes(file: UploadFile) -> tuple[str, bytes]:
 def _remove_file_if_exists(file_path: str) -> None:
     if os.path.exists(file_path):
         os.remove(file_path)
+        
+def load_dataframe_from_bytes(content: bytes, filename: str):
+    if filename.endswith(".csv"):
+        return pd.read_csv(io.BytesIO(content))
+    elif filename.endswith(".xlsx"):
+        return pd.read_excel(io.BytesIO(content))
+    else:
+        raise ValueError("Unsupported file type")
 
 
 def _save_and_validate_dataset(filename: str, content: bytes) -> tuple[str, FileValidationResponse]:
@@ -421,10 +431,28 @@ async def run_diagnostics(
     target_column: Optional[str] = Form(default=None),
 ) -> Layer1OutputResponse:
     filename, content = await _read_upload_bytes(file)
-    file_path, _ = _save_and_validate_dataset(filename, content)
-    resolved_target = _resolve_target_column(file_path, target_column)
-    _store_uploaded_state(os.path.basename(file_path), resolved_target)
-    return _execute_pipeline(file_path, target_column=resolved_target)
+    df = load_dataframe_from_bytes(content, filename)
+    resolved_target = target_column
+    result = run_pipeline_from_df(df, target_column=resolved_target)
+
+    if result.get("status") != "success":
+        raise HTTPException(
+            status_code=500,
+            detail=f"Pipeline execution failed: {result.get('message', 'Unknown error')}",
+        )
+
+    if isinstance(result.get("shape"), tuple):
+        result["shape"] = list(result["shape"])
+
+    with open(LAYER1_OUTPUT_PATH, "w", encoding="utf-8") as output_file:
+        json.dump(result, output_file, indent=4, default=str)
+
+    _store_uploaded_state(filename, resolved_target)
+
+    try:
+        return Layer1OutputResponse(**result)
+    except ValidationError as exc:
+        raise HTTPException(status_code=500, detail=f"Pipeline output validation failed: {exc}") from exc
 
 
 @app.get(
