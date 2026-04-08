@@ -12,6 +12,7 @@ export default function TargetColumnSelector() {
     const suggestedTarget = useDiagnosticsStore((store) => store.suggestedTarget);
     const selectedTarget = useDiagnosticsStore((store) => store.selectedTarget);
     const targetConfirmed = useDiagnosticsStore((store) => store.targetConfirmed);
+    const selectedFile = useDiagnosticsStore((store) => store.selectedFile);
 
     const setColumns = useDiagnosticsStore((store) => store.setColumns);
     const setSelectedTarget = useDiagnosticsStore((store) => store.setSelectedTarget);
@@ -51,8 +52,13 @@ export default function TargetColumnSelector() {
         }
 
         async function fetchColumns() {
+            if (!selectedFile) {
+                setError("No file uploaded. Please upload a file first.");
+                setLoading(false);
+                return;
+            }
             try {
-                const response = await getDatasetColumns();
+                const response = await getDatasetColumns(selectedFile);
                 setColumns(response.columns, response.suggested_target);
                 if (response.suggested_target && !selectedTarget) {
                     setSelectedTarget(response.suggested_target);
@@ -81,7 +87,11 @@ export default function TargetColumnSelector() {
         setError(null);
 
         try {
-            const response = await setTargetColumn(selectedTarget);
+            if (!selectedFile) {
+                setError("No file uploaded. Please upload a file first.");
+                return;
+            }
+            const response = await setTargetColumn(selectedFile, selectedTarget);
             if (response.valid) {
                 setTargetConfirmed(true);
                 setState("target-selected");
