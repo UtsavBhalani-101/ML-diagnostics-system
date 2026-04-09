@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 3001",
+    "dev": "node -e \"require('fs').existsSync('.env.local') && require('dotenv').config({path: '.env.local'}); require('dotenv').config(); require('child_process').execSync('next dev --port ' + (process.env.PORT || 3000), {stdio: 'inherit'})\"",
     "build": "next build",
     "start": "next start"
   },
