@@ -7,11 +7,11 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "check-types": "turbo check-types",
-    "dev:native": "turbo -F native dev",
-    "dev:web": "turbo -F web dev"
+    "dev": "npm -w apps/web run dev",
+    "build": "npm -w apps/web run build",
+    "start": "npm -w apps/web run start",
+    "check-types": "npm -w apps/web run check-types",
+    "dev:web": "npm -w apps/web run dev"
   },
   "dependencies": {
     "@frontend/env": "*",
@@ -25,7 +25,6 @@
   },
   "devDependencies": {
     "@frontend/config": "*",
-    "turbo": "^2.6.3",
     "typescript": "^5"
   },
   "packageManager": "npm@11.6.0"
