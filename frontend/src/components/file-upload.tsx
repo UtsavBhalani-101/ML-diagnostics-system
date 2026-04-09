@@ -40,7 +40,7 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
     const [errorMessage, setErrorMessage] = useState("");
     const [validationResponse, setValidationResponse] = useState<FileValidationResponse | null>(
         storedStatus === "success"
-            ? { is_valid: true, filename: storedFileName, extension: storedExtension, saved: true, error: null }
+            ? { is_valid: true, filename: storedFileName, extension: storedExtension, error: null }
             : null
     );
     const inputRef = useRef<HTMLInputElement>(null);
