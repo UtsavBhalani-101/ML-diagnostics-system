@@ -211,6 +211,8 @@ _DEFAULT_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3000",
+    "https://probeengine.tech",
+    "https://www.probeengine.tech"
 ]
 
 def _get_cors_origins() -> list[str]:
