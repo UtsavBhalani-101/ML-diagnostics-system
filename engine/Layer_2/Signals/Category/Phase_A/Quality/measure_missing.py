@@ -1,69 +1,86 @@
-import pandas as pd
-import numpy as np
+import numpy as np 
+import pandas as pd 
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
-class CategoricalMissingStats:
-    """
-    PURE MEASUREMENT ENGINE
-    Computes missingness structure for categorical columns.
-    No decisions. No assumptions. No actions.
-    """
 
-    IMPLICIT_MISSING_TOKENS = {
-        "nan", "null", "n/a", "na", "none", "missing", "", "?", "unknown"
+@dataclass(frozen=True)
+class Signals:
+    pass
+
+@dataclass()
+class Result:
+    test_name: str 
+    layer: str 
+    score: float
+    label: str
+    flag: bool
+    meta: Dict[str, float]
+    
+    
+
+IMPLICIT_MISSING_TOKENS = {
+    "nan", "null", "n/a", "na", "none", "missing", "", "?", "unknown", "-", "undefined"
+}
+
+def get_signals(col: pd.Series) -> dict:
+    n_total = len(col)
+    
+    if n_total == 0:
+        return {"missing_ratio": 0.0, "real_null_count": 0, "implicit_null_count": 0}
+    
+    # real nulls (NaN, None)
+    real_null_count = int(col.isna().sum())
+    
+    # implicit nulls (garbage tokens hiding as valid values)
+    non_null = col.dropna().astype(str).str.strip().str.lower()
+    implicit_mask = non_null.isin(IMPLICIT_MISSING_TOKENS)
+    implicit_null_count = int(implicit_mask.sum())
+    
+    total_missing = real_null_count + implicit_null_count
+    missing_ratio = total_missing / n_total
+    
+    return {
+        "missing_ratio": float(missing_ratio),
+        "real_null_count": real_null_count,
+        "implicit_null_count": implicit_null_count,
+        "total_missing": total_missing
     }
 
-    def __init__(self, col: pd.Series):
-        self.col = col
-        self.n_rows = len(col)
-
-        if self.n_rows == 0:
-            self.valid = False
-            return
-
-        self.valid = True
-
-        # --- REAL NULLS ---
-        self.real_null_count = col.isna().sum()
-
-        # --- STRING NORMALIZATION ---
-        str_col = col.dropna().astype(str).str.lower().str.strip()
-
-        # --- IMPLICIT NULLS ---
-        self.implicit_null_mask = str_col.isin(self.IMPLICIT_MISSING_TOKENS)
-        self.implicit_null_count = int(self.implicit_null_mask.sum())
-
-        # --- TOTAL MISSING ---
-        self.total_missing = int(self.real_null_count + self.implicit_null_count)
-        self.missing_ratio = (
-            self.total_missing / self.n_rows if self.n_rows > 0 else 0
-        )
-
-        # --- TYPES OF MISSING FOUND (DESCRIPTIVE) ---
-        self.missing_types_found = set(
-            str_col[self.implicit_null_mask].unique().tolist()
-        )
-
-        self.real_null_types = set()
-
-        if col.isna().any():
-            # Detect actual python-level nulls
-            for v in col[col.isna()]:
-                if v is None:
-                    self.real_null_types.add("None")
-                else:
-                    self.real_null_types.add("np.nan")
-
-
-    def as_evidence(self):
-        if not self.valid or self.total_missing == 0:
-            return None
-
-        return {
-            "missing_ratio": round(self.missing_ratio, 4),
-            "total_missing": self.total_missing,
-            "missing_breakdown": {
-                "real_nulls": sorted(self.real_null_types),
-                "implicit_nulls": sorted(self.missing_types_found)
-            }
+def infer_signals(signals: Dict) -> Result:
+    mr = signals["missing_ratio"]
+    rnc = signals["real_null_count"]
+    inc = signals["implicit_null_count"]
+    
+    score = mr
+    
+    flag = mr > 0.5
+    
+    if mr > 0.5:
+        label = "CRITICAL"
+    elif mr > 0.1:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+    
+    return Result(
+        test_name="categorical_measure_missing",
+        layer="quality",
+        score=round(score, 4),
+        label=label,
+        flag=flag,
+        meta={
+            "missing_ratio": round(mr, 4),
+            "real_null_count": rnc,
+            "implicit_null_count": inc
         }
+    )
 
+
+def run_measure_missing_check():
+    combined_signals = get_signals(pd.Series(["cat", None, "dog", "null", "?", "bird", None, "na"]))
+    print("signals: ", combined_signals)
+    print(infer_signals(combined_signals))
+
+if __name__ == "__main__":
+    run_measure_missing_check()

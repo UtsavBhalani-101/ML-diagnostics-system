@@ -1,83 +1,83 @@
-import pandas as pd
-import numpy as np
+import numpy as np 
+import pandas as pd 
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
-def phasea_categorical_integrity(
-    col: pd.Series,
-    col_name: str,
-    high_cardinality_cap: int = 50,
-    near_unique_ratio: float = 0.9
-):
-    """
-    Phase A: Categorical Integrity & Cardinality Diagnostic.
 
-    Assumption:
-        Column represents a clean, finite categorical label set.
-    """
+@dataclass(frozen=True)
+class Signals:
+    pass
 
-    if col.empty:
-        return None
+@dataclass()
+class Result:
+    test_name: str 
+    layer: str 
+    score: float
+    label: str
+    flag: bool
+    meta: Dict[str, float]
+    
+    
 
-    raw_col = col
-    clean_col = col.dropna().astype(str)
-    n_rows = len(clean_col)
-
+def get_signals(col: pd.Series) -> dict:
+    clean = col.dropna().astype(str).str.strip()
+    n_rows = len(clean)
+    
     if n_rows == 0:
-        return None
+        return {"n_unique": 0, "unique_ratio": 0.0, "n_rows": 0}
+    
+    # normalize to lowercase for true cardinality
+    n_raw = clean.nunique()
+    n_normalized = clean.str.lower().nunique()
+    
+    unique_ratio = n_normalized / n_rows
+    
+    # how many categories collapse under normalization
+    noise_ratio = (n_raw - n_normalized) / n_raw if n_raw > 0 else 0.0
+    
+    return {
+        "n_unique": int(n_normalized),
+        "unique_ratio": float(unique_ratio),
+        "noise_ratio": float(noise_ratio),
+        "n_rows": n_rows
+    }
 
-    # -----------------------------
-    # Hygiene simulation (internal)
-    # -----------------------------
-    n_raw = clean_col.nunique()
-    n_lower = clean_col.str.lower().nunique()
-    n_strip = clean_col.str.strip().nunique()
-
-    hygiene_noise = (
-        n_lower < n_raw or
-        n_strip < n_raw
+def infer_signals(signals: Dict) -> Result:
+    ur = signals["unique_ratio"]
+    nu = signals["n_unique"]
+    nr = signals["noise_ratio"]
+    
+    # high unique_ratio → likely ID or free-text, not a real categorical
+    score = ur
+    
+    flag = ur > 0.9
+    
+    if ur > 0.9:
+        label = "CRITICAL"
+    elif ur > 0.5:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+    
+    return Result(
+        test_name="categorical_cardinality_check",
+        layer="semantics",
+        score=round(score, 4),
+        label=label,
+        flag=flag,
+        meta={
+            "n_unique": nu,
+            "unique_ratio": round(ur, 4),
+            "noise_ratio": round(nr, 4)
+        }
     )
 
-    garbage_tokens = {'?', 'nan', 'null', 'none', 'missing', 'n/a', '-', ''}
-    garbage_ratio = clean_col.str.lower().isin(garbage_tokens).mean()
 
-    mixed_types = raw_col.dropna().map(type).nunique() > 1
+def run_cardinality_check():
+    # moderate cardinality column
+    combined_signals = get_signals(pd.Series(["red", "blue", "green", "Red", "blue", "yellow", "red", "green"]))
+    print("signals: ", combined_signals)
+    print(infer_signals(combined_signals))
 
-    # -----------------------------
-    # Cardinality logic (exposed)
-    # -----------------------------
-    n_unique = n_lower
-    unique_ratio = n_unique / n_rows
-
-    evidence = {}
-
-    if unique_ratio > near_unique_ratio:
-        evidence["unique_ratio"] = round(unique_ratio, 3)
-
-    if n_unique > high_cardinality_cap:
-        evidence["unique_count"] = n_unique
-
-    if garbage_ratio > 0.05:
-        evidence["implicit_null_ratio"] = round(garbage_ratio, 3)
-
-    if mixed_types:
-        evidence["mixed_type_detected"] = True
-
-    # Hygiene only raises severity if something else is wrong
-    severity = "medium"
-    if unique_ratio > near_unique_ratio:
-        severity = "high"
-
-    if evidence:
-        return {
-            "assumption": "finite_categorical_set",
-            "type": "violated",
-            "columns": [col_name],
-            "evidence": evidence,
-            "risk": (
-                "Column does not behave like a clean finite categorical label set. "
-                "Observed cardinality, uniqueness, or consistency patterns "
-                "suggest unstable or unconstrained categories."
-            ),
-            "severity": severity
-        }
-
-    return None
+if __name__ == "__main__":
+    run_cardinality_check()
