@@ -17,6 +17,7 @@ logger = logging.getLogger("ml_diag")
 class Structure:
     dimension: str
     name: str
+    label: str
     value: Any
     meta: Optional[Dict] = None
 
@@ -43,6 +44,7 @@ def dataset_shape(df: pd.DataFrame) -> Structure:
     result = Structure(
         dimension=DIMENSION,
         name="dataset_shape",
+        label=None,
         value={"rows": int(rows), "cols": int(cols)},
         meta=None
     )
@@ -55,10 +57,18 @@ def global_missing_ratio(df: pd.DataFrame) -> Structure:
     total_cells = df.shape[0] * df.shape[1]
 
     ratio = float(df.isna().sum().sum() / total_cells) if total_cells > 0 else 0.0
+    
+    if ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
 
     result = Structure(
         dimension=DIMENSION,
         name="global_missing_ratio",
+        label=label,
         value=ratio,
         meta={"total_cells": total_cells}
     )
@@ -68,27 +78,52 @@ def global_missing_ratio(df: pd.DataFrame) -> Structure:
 
 
 def col_missing_ratio(df: pd.DataFrame) -> Structure:
-    ratios = df.isna().mean().to_dict()
+    ratio = df.isna().mean().to_dict()
+    
+    worst_ratio = max(ratio.values())
+
+    if worst_ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif worst_ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+                
 
     result = Structure(
         dimension=DIMENSION,
         name="column_missing_ratio",
-        value=ratios,
-        meta={"num_columns": len(ratios)}
+        label=label,
+        value=ratio,
+        meta={"num_columns": len(ratio)}
     )
 
-    logger.info("Computed column_missing_ratio", extra={"num_columns": len(ratios)})
+    logger.info("Computed column_missing_ratio", extra={"num_columns": len(ratio)})
     return result
 
 
 def duplicated_ratio(df: pd.DataFrame) -> Structure:
-    ratio = float(df.duplicated().mean()) if len(df) > 0 else 0.0
+    
+    df_copy = df.copy()
+    
+    df_copy = df_copy.fillna("__MISSING__")   
+    
+    
+    ratio = float(df_copy.duplicated().mean()) if len(df) > 0 else 0.0
+    
+    if ratio < 0.02:
+        label = "ACCEPTABLE"
+    elif ratio < 0.15:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
 
     result = Structure(
         dimension=DIMENSION,
         name="duplicate_ratio",
+        label=label,
         value=ratio,
-        meta={"num_rows": len(df)}
+        meta={"num_rows": len(df_copy)}
     )
 
     logger.info("Computed duplicate_ratio")
@@ -96,15 +131,26 @@ def duplicated_ratio(df: pd.DataFrame) -> Structure:
 
 
 def constant_columns(df: pd.DataFrame) -> Structure:
-    constant_cols = df.columns[df.nunique(dropna=False) <= 1]
+    constant_cols = df.columns[df.nunique(dropna=True) <= 1]
+    
+    ratio = float(len(constant_cols) / df.shape[1]) if df.shape[1] > 0 else 0.0
+    
+    if ratio == 0.0:
+        label = "ACCEPTABLE"
+    elif ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+    
 
     result = Structure(
         dimension=DIMENSION,
         name="constant_columns",
         value={
             "columns": list(constant_cols),
-            "ratio": float(len(constant_cols) / df.shape[1]) if df.shape[1] > 0 else 0.0
+            "ratio": ratio,
         },
+        label=label,
         meta={"total_columns": df.shape[1]}
     )
 
@@ -117,16 +163,27 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
     hidden_counts = {}
 
     obj_cols = df.select_dtypes(include="object")
+    worst_ratio = 0.0
 
     for col in obj_cols:
         series = df[col].astype(str).str.strip().str.lower()
         ratio = float(series.isin(tokens).mean())
         hidden_counts[col] = ratio
+        if ratio > worst_ratio:
+            worst_ratio = ratio
+        
+    if worst_ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif worst_ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
 
     result = Structure(
         dimension=DIMENSION,
         name="hidden_missing_ratio",
-        value=hidden_counts,
+        value={"ratios": hidden_counts, "worst_ratio": worst_ratio},
+        label=label,
         meta={"num_object_columns": len(obj_cols.columns)}
     )
 
@@ -137,23 +194,40 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
 def mixed_type_columns(df: pd.DataFrame) -> Structure:
     mixed_cols = []
     obj_cols = df.select_dtypes(include="object")
+    
+    ignore_tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
 
     for col in obj_cols:
-        numeric_ratio = pd.to_numeric(df[col], errors="coerce").notna().mean()
+        series = df[col].astype(str).str.strip().str.lower()
 
-        if 0.7 < numeric_ratio < 1.0:
+        # remove hidden missing BEFORE type check
+        valid_series = series[~series.isin(ignore_tokens)]
+
+        coerced = pd.to_numeric(valid_series, errors="coerce")
+
+        has_numeric = coerced.notna().any()
+        has_non_numeric = coerced.isna().any()
+
+        if has_numeric and has_non_numeric:
             mixed_cols.append(col)
+
+    ratio = len(mixed_cols) / df.shape[1] if df.shape[1] > 0 else 0.0
+
+    if ratio == 0:
+        label = "ACCEPTABLE"
+    elif ratio < 0.05:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
 
     result = Structure(
         dimension=DIMENSION,
         name="mixed_type_columns",
-        value={
-            "columns": mixed_cols,
-            "ratio": float(len(mixed_cols) / df.shape[1]) if df.shape[1] > 0 else 0.0
-        },
+        value={"columns": mixed_cols, "ratio": ratio},
+        label=label,
         meta={"num_object_columns": len(obj_cols.columns)}
     )
-
+    
     if mixed_cols:
         logger.warning("Mixed type columns detected", extra={"columns": mixed_cols})
     else:
@@ -196,6 +270,7 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
                     dimension=DIMENSION,
                     name=signal_fn.__name__,
                     value=None,
+                    label=None,
                     meta={"error": str(e)}
                 )
             )
@@ -207,14 +282,14 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
 
 if __name__ == "__main__":
     
-    run_signal_extraction(df)
+    # run_signal_extraction(df)
     
-    # # Example usage
-    # df = pd.DataFrame({
-    #     "A": [1, 2, None, 4],
-    #     "B": ["NA", "yes", "no", "unknown"]
-    # })
+    # Example usage
+    df = pd.DataFrame({
+        "A": [1, 2, None, 4],
+        "B": ["NA", "yes", "no", "unknown"]
+    })
 
-    # results = run_signal_extraction(df)
-    # for r in results:
-    #     print(r)
+    results = run_signal_extraction(df)
+    for r in results:
+        print(r)
