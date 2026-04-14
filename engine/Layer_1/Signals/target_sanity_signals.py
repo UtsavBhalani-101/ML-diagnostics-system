@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, List
 # ------------------ LOGGING ------------------
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger("ml_diag")
+logger = logging.getLogger(__name__)
 
 
 # ------------------ STRUCTURE ------------------
@@ -26,7 +26,7 @@ DIMENSION = "target_viability"
 
 # ------------------ CONSTANTS ------------------
 
-HIDDEN_MISSING = {"na", "n/a", "null", "none", "", "?", "unknown"}
+HIDDEN_MISSING = {"na", "n/a", "null", "none", "", " ", "?", "unknown"}
 
 
 # ------------------ UTILITIES ------------------
@@ -45,52 +45,18 @@ def is_mixed_type(y: pd.Series) -> bool:
     return len(types) > 1
 
 
-def infer_task_type(y: pd.Series) -> Dict:
-    n = len(y)
-    n_unique = y.nunique()
-    unique_ratio = n_unique / n if n > 0 else 0
-
-    most_common_ratio = y.value_counts(normalize=True).iloc[0] if n > 0 else 0
-
-    classification_score = 0
-    regression_score = 0
-
-    if n_unique <= 10:
-        classification_score += 2
-    if unique_ratio > 0.1:
-        regression_score += 2
-    if most_common_ratio > 0.5:
-        classification_score += 2
-    if most_common_ratio < 0.1:
-        regression_score += 2
-
-    task = "classification" if classification_score > regression_score else "regression"
-
-    confidence = abs(classification_score - regression_score) / 4
-
-    return {
-        "task_type": task,
-        "confidence": confidence,
-        "meta": {
-            "n_unique": n_unique,
-            "unique_ratio": unique_ratio,
-            "most_common_ratio": most_common_ratio
-        }
-    }
-
 
 # ------------------ VALIDATION ------------------
 
 def validate_target(y: pd.Series) -> Dict:
-    y_clean = clean_target(y)
 
-    if y_clean.isna().all():
+    if y.isna().all():
         return {
             "status": "fail",
             "reason": "Target is entirely missing"
         }
 
-    if is_mixed_type(y_clean):
+    if is_mixed_type(y):
         return {
             "status": "fail",
             "reason": "Target column has mixed data types"
@@ -98,16 +64,15 @@ def validate_target(y: pd.Series) -> Dict:
 
     return {
         "status": "pass",
-        "y_clean": y_clean
+        "y": y
     }
 
 
 # ------------------ SIGNALS ------------------
 
 def target_missing_ratio(y: pd.Series) -> Structure:
-    y_clean = clean_target(y)
 
-    ratio = float(y_clean.isna().mean())
+    ratio = float(y.isna().mean())
 
     result = Structure(
         dimension=DIMENSION,
@@ -116,96 +81,68 @@ def target_missing_ratio(y: pd.Series) -> Structure:
         meta={"n_samples": len(y)}
     )
 
-    logger.info("Computed target_missing_ratio", extra={
-        "dimension": DIMENSION,
-        "value": ratio
-    })
-
     return result
 
 
 def target_variance(y: pd.Series) -> Structure:
-    y_clean = clean_target(y)
-    y_numeric = pd.to_numeric(y_clean, errors="coerce").dropna()
+    y_numeric = pd.to_numeric(y, errors="coerce").dropna()
 
     variance = float(np.var(y_numeric)) if len(y_numeric) > 0 else None
+    
+    target_range = float(np.max(y_numeric) - np.min(y_numeric)) if len(y_numeric) > 0 else None
 
     result = Structure(
         dimension=DIMENSION,
         name="target_variance",
-        value=variance,
+        value={"variance" : variance, "target_range" : target_range},
         meta={"valid_numeric_samples": len(y_numeric)}
     )
-
-    logger.info("Computed target_variance", extra={
-        "value": variance
-    })
 
     return result
 
 
 def target_unique_count(y: pd.Series) -> Structure:
-    y_clean = clean_target(y)
 
-    unique_count = int(y_clean.nunique())
+    unique_count = int(y.nunique())
 
     result = Structure(
         dimension=DIMENSION,
         name="target_unique_count",
         value=unique_count,
-        meta={"n_samples": len(y_clean)}
+        meta={"n_samples": len(y)}
     )
-
-    logger.info("Computed target_unique_count", extra={
-        "value": unique_count
-    })
 
     return result
 
 
 def class_imbalance_score(y: pd.Series) -> Structure:
-    y_clean = clean_target(y).dropna()
 
-    if len(y_clean) == 0:
+    if len(y) == 0:
         score = None
     else:
-        score = float(y_clean.value_counts(normalize=True).iloc[0])
+        score = float(y.value_counts(normalize=True).iloc[0])
 
     result = Structure(
         dimension=DIMENSION,
         name="class_imbalance_score",
         value=score,
-        meta={"n_samples": len(y_clean)}
+        meta={"n_samples": len(y)}
     )
-
-    logger.info("Computed class_imbalance_score", extra={
-        "value": score
-    })
 
     return result
 
 
-def task_type_signal(y: pd.Series) -> Structure:
-    y_clean = clean_target(y).dropna()
-
-    result_data = infer_task_type(y_clean)
+def dataset_shape(y: pd.Series) -> Structure:
 
     result = Structure(
         dimension=DIMENSION,
-        name="task_type",
-        value=result_data["task_type"],
-        meta={
-            "confidence": result_data["confidence"],
-            **result_data["meta"]
-        }
+        name="dataset_shape",
+        value={"rows": len(y), "cols": 1},
+        meta={"n_samples": len(y)}
     )
 
-    logger.info("Inferred task_type", extra={
-        "task_type": result.value,
-        "confidence": result.meta["confidence"]
-    })
-
     return result
+
 
 
 # ------------------ ORCHESTRATOR ------------------
@@ -215,13 +152,23 @@ SIGNALS_REGISTRY = [
     target_variance,
     target_unique_count,
     class_imbalance_score,
-    task_type_signal
+    dataset_shape,
 ]
+
+REQUIRED_SIGNALS = {
+    "target_missing_ratio": float,
+    "target_variance": dict,
+    "target_unique_count": int,
+    "class_imbalance_score": (float, type(None)),
+    "dataset_shape": dict,
+}
 
 
 def run_target_signals(y: pd.Series) -> List[Structure]:
+    
+    y_clean = clean_target(y)
 
-    validation = validate_target(y)
+    validation = validate_target(y_clean)
 
     if validation["status"] == "fail":
         logger.error("Target validation failed", extra={"reason": validation["reason"]})
@@ -239,7 +186,8 @@ def run_target_signals(y: pd.Series) -> List[Structure]:
 
     for signal_fn in SIGNALS_REGISTRY:
         try:
-            res = signal_fn(y)
+            res = signal_fn(y_clean)
+            logger.debug(f"{signal_fn.__name__} success")
             results.append(res)
 
         except Exception as e:
@@ -253,13 +201,21 @@ def run_target_signals(y: pd.Series) -> List[Structure]:
                     dimension=DIMENSION,
                     name=signal_fn.__name__,
                     value=None,
-                    meta={"error": str(e)}
+                    meta={"status" : "error" ,"error": str(e)}
                 )
             )
 
     return results
 
 if __name__ == "__main__":
-    run_target_signals(target_col)
+    # Example target column
+    example_target_col = pd.Series([1, 0, 1, 1, "NA", np.nan, 0, 1, 1, 0, 0, 1])
+    print("--- Running Target Signals ---")
+    results = run_target_signals(example_target_col)
     
-    
+    for res in results:
+        # print(f"{res.name}:")
+        # print(f"  Value: {res.value}")
+        # print(f"  Meta: {res.meta}\n")
+        
+        print(res)

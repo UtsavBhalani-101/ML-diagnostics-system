@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -145,3 +145,7 @@ def run_sample_adequacy(signals: dict) -> TestResult:
             extra={"error": str(e)},
         )
         raise
+
+
+if __name__ == "__main__":
+    run_sample_adequacy()

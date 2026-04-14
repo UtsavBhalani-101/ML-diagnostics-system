@@ -1,180 +1,261 @@
+import sys
+import os
+
+# Add root project path to allow direct execution
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+
 from dataclasses import dataclass
 import logging
-from typing import Dict, Optional
-
+from typing import Dict, List, Optional
+from engine.Layer_1.Signals.data_integrity_signals import Signal_Structure
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger("ml_diag")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class TestResult:
     dimension: str
     name: str
-    status: str
+    label: str
     reason: str
     risk: float
     metrics: Optional[Dict] = None
+    
+@dataclass(frozen=True)
+class OverallResult:
+    dimension: str
+    status: str
+    reason: str
+    
 
 
 DIMENSION = "data_integrity"
 
 
-def validate_signals(signals: dict):
-    required = [
-        "rows",
-        "cols",
-        "global_missing_ratio",
-        "column_missing_ratio",
-        "duplicate_ratio",
-        "constant_columns",
-        "constant_ratio",
-        "hidden_missing_ratio",
-        "mixed_type_columns",
-        "mixed_ratio",
-    ]
-
-    for key in required:
-        if key not in signals:
-            raise ValueError(f"Missing signal: {key}")
+def validate_signals(signals: List[Signal_Structure]):
+    pass
 
 
-def missing_risk(signals):
-    ratio = signals["global_missing_ratio"]
-    logger.info(f"Compute missing_risk: {ratio}")
-    return min(ratio / 0.3, 1.0)
-
-
-def duplicate_risk(signals):
-    ratio = signals["duplicate_ratio"]
-    logger.info(f"Compute duplicate_risk: {ratio}")
-    return min(ratio / 0.2, 1.0)
-
-
-def constant_risk(signals):
-    ratio = signals["constant_ratio"]
-    logger.info(f"Compute constant_risk: {ratio}")
-    return min(ratio / 0.3, 1.0)
-
-
-def hidden_missing_risk(signals):
-    data = signals["hidden_missing_ratio"]
-    if not data:
-        return 0.0
-
-    max_ratio = max(data.values())
-    logger.info(f"Compute hidden_missing_risk: {max_ratio}")
-    return min(max_ratio / 0.3, 1.0)
-
-
-def mixed_type_risk(signals):
-    ratio = signals["mixed_ratio"]
-    logger.info(f"Compute mixed_type_risk: {ratio}")
-    return min(ratio / 0.2, 1.0)
-
-
-def check_hard_failures(signals):
-    logger.info("Checking hard failures: Mixed type")
-    if signals["mixed_ratio"] > 0:
-        return TestResult(
-            dimension=DIMENSION,
-            name="mixed_types",
-            status="CRITICAL",
-            reason="Mixed data types detected; structure is ambiguous",
-            risk=1.0,
-            metrics={"mixed_ratio": signals["mixed_ratio"]},
-        )
-
-    logger.info("Checking hard failures: Hidden missing")
-    if signals["hidden_missing_ratio"]:
-        max_hidden = max(signals["hidden_missing_ratio"].values())
-        if max_hidden > 0.5:
-            return TestResult(
-                dimension=DIMENSION,
-                name="hidden_missing",
-                status="CRITICAL",
-                reason="Extreme hidden missing values detected",
-                risk=1.0,
-                metrics={"max_hidden_missing": max_hidden},
-            )
-
-    return None
-
-
-def aggregate_risk(signals):
-    """
-    Hybrid aggregation:
-    - dominant risks -> max()
-    - additive risks -> average
-    - final -> max(dominant, additive)
-    """
-
-    risks = {
-        "missing_values": missing_risk(signals),
-        "duplicates": duplicate_risk(signals),
-        "constant_columns": constant_risk(signals),
-        "hidden_missing": hidden_missing_risk(signals),
-    }
-
-    logger.info(f"Computed individual risks: {risks}")
-
-    dominant_keys = ["hidden_missing"]
-    additive_keys = ["missing_values", "duplicates", "constant_columns"]
-
-    dominant_values = [risks[k] for k in dominant_keys if k in risks]
-    dominant_max = max(dominant_values) if dominant_values else 0.0
-
-    additive_values = [risks[k] for k in additive_keys if k in risks]
-    additive_total = sum(additive_values) / len(additive_values) if additive_values else 0.0
-
-    total_risk = max(dominant_max, additive_total)
-
-    logger.info(
-        f"Aggregation | dominant={dominant_max:.3f} "
-        f"additive={additive_total:.3f} "
-        f"total={total_risk:.3f}"
+def global_missing_risk(signals: List[Signal_Structure]) -> TestResult:
+    gm_signal = next(s for s in signals if s.name == "global_missing_ratio")
+    ratio = gm_signal.value
+    
+    if ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="global_missing_risk",
+        label=label,
+        reason="None",
+        risk=ratio,
+        metrics=gm_signal.meta
     )
+    
+    logger.info(f"Compute missing_risk: {ratio}")
+    return result
 
-    return total_risk, {
-        "dominant": {k: risks[k] for k in dominant_keys},
-        "additive": {k: risks[k] for k in additive_keys},
-    }
+def column_missing_risk(signals: List[Signal_Structure]) -> TestResult:
+    cm_signal = next(s for s in signals if s.name == "column_missing_ratio")
+    worst_ratio = cm_signal.value['worst_ratio']
 
+    if worst_ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif worst_ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="column_missing_risk",
+        label=label,
+        reason="None",
+        risk=worst_ratio,
+        metrics=cm_signal.meta
+    )
+    return result
 
-def decision_from_risk(total_risk):
-    logger.info("Taking a decision based on risk")
+def duplicate_risk(signals: List[Signal_Structure]) -> TestResult:
+    dup_signal = next(s for s in signals if s.name == "duplicate_ratio")
+    ratio = dup_signal.value
 
-    if total_risk < 0.3:
-        return "SAFE", "Missingness, duplication, and constants are currently low. Low structural risk."
-    if total_risk < 0.7:
-        return "WARNING", "Structural issues are present and should be investigated before modeling."
-    return "CRITICAL", "Structural integrity is unreliable and likely to block dependable modeling."
+    if ratio < 0.02:
+        label = "ACCEPTABLE"
+    elif ratio < 0.15:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+    
+    result = TestResult(
+        dimension=DIMENSION,
+        name="duplicate_risk",
+        label=label,
+        reason="None",
+        risk=ratio,
+        metrics=dup_signal.meta
+    )
+    
+    logger.info(f"Compute duplicate_risk: {ratio}")
+    return result
 
+def constant_risk(signals: List[Signal_Structure]) -> TestResult:
+    const_signal = next(s for s in signals if s.name == "constant_columns")
+    ratio = const_signal.value["ratio"]
+    
+    if ratio == 0.0:
+        label = "ACCEPTABLE"
+    elif ratio < 0.2:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="constant_risk",
+        label=label,
+        reason="None",
+        risk=ratio,
+        metrics=const_signal.meta
+    )
+    
+    logger.info(f"Compute constant_risk: {ratio}")
+    return result
 
-def run_data_integrity(signals: dict) -> TestResult:
-    validate_signals(signals)
+def hidden_missing_risk(signals: List[Signal_Structure]) -> TestResult:
+    hidden_miss_signal = next(s for s in signals if s.name == "hidden_missing_ratio")
+    worst_ratio = hidden_miss_signal.value['worst_ratio']
+    
+    if worst_ratio < 0.05:
+        label = "ACCEPTABLE"
+    elif worst_ratio < 0.15:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="hidden_missing_risk",
+        label=label,
+        reason="None",
+        risk=worst_ratio,
+        metrics=hidden_miss_signal.meta
+    )
+    
+    logger.info(f"Compute hidden_missing_risk: {worst_ratio}")
+    return result
+
+def mixed_type_risk(signals: List[Signal_Structure]) -> TestResult:
+    mixed_signal = next(s for s in signals if s.name == "mixed_type_columns")
+    ratio = mixed_signal.value['ratio']
+    
+    if ratio == 0:
+        label = "ACCEPTABLE"
+    elif ratio < 0.05:
+        label = "CONCERN"
+    else:
+        label = "UNACCEPTABLE"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="mixed_type_risk",
+        label=label,
+        reason="None",
+        risk=ratio,
+        metrics=mixed_signal.meta
+    )    
+    
+    logger.info(f"Compute mixed_type_risk: {ratio}")
+    return result
+
+LOGIC_REGISTRY = [
+    global_missing_risk,
+    column_missing_risk,
+    duplicate_risk,
+    constant_risk,
+    hidden_missing_risk,
+    mixed_type_risk
+]
+
+def aggregate_risk(results: List[TestResult]) -> OverallResult:
     try:
-        hard_fail = check_hard_failures(signals)
-        if hard_fail:
-            return hard_fail
-
-        total_risk, individual_risks = aggregate_risk(signals)
-        status, reason = decision_from_risk(total_risk)
-
-        return TestResult(
+        status = "PROCEED"
+        
+        for res in results:
+            if res.label == "UNACCEPTABLE":
+                status = "STOP"
+            elif res.label == "CONCERN":
+                status = "REVIEW"
+        
+        result =  OverallResult(
             dimension=DIMENSION,
-            name="data_integrity_overall",
             status=status,
-            reason=reason,
-            risk=round(total_risk, 3),
-            metrics={
-                "total_risk": total_risk,
-                "risk_breakdown": individual_risks,
-            },
+            reason="None"
         )
+
     except Exception as e:
-        logger.error(
-            "Signal evaluation failed for data integrity",
-            extra={"error": str(e)},
+        logger.error(f"Overall result computation failed: {str(e)}")
+        result = OverallResult(
+            dimension=DIMENSION,
+            status="STOP",
+            reason="Some Internal failure occured"
         )
-        raise
+        
+    return result
+
+def run_data_integrity(signals: List[Signal_Structure]) -> tuple[List[TestResult], OverallResult]:
+    results: List[TestResult] = []
+    
+    for logic_fn in LOGIC_REGISTRY:
+        try: 
+            result = logic_fn(signals)
+            results.append(result)
+        except Exception as e:
+            logger.error(
+                f"Logic computation failed: {logic_fn.__name__}",
+                extra={"signal": logic_fn.__name__, "error": str(e)}
+            )
+            results.append(
+                TestResult(
+                    dimension=DIMENSION,
+                    name=logic_fn.__name__,
+                    label="ERROR",
+                    reason=str(e),
+                    risk=1.0,
+                    metrics={"error": str(e)}
+                )
+            )
+    
+    overall = aggregate_risk(results)
+            
+    return results, overall
+
+
+if __name__ == "__main__":
+    
+    # Example signals provided by the user
+    mocked_signals = [
+        Signal_Structure(dimension='data_integrity', name='dataset_shape', value={'rows': 10000, 'cols': 3}, meta=None),
+        Signal_Structure(dimension='data_integrity', name='global_missing_ratio', value=0.0, meta={'total_cells': 30000}),
+        Signal_Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'cat_1': 0.0, 'cat_2': 0.0, 'cat_3': 0.0}, 'worst_ratio': 0.0}, meta={'num_columns': 3}),
+        Signal_Structure(dimension='data_integrity', name='duplicate_ratio', value=0.9976, meta={'num_rows': 10000}),
+        Signal_Structure(dimension='data_integrity', name='constant_columns', value={'columns': [], 'ratio': 0.0}, meta={'total_columns': 3}),
+        Signal_Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'cat_1': 0.1534, 'cat_2': 0.0, 'cat_3': 0.0}, 'worst_ratio': 0.1534}, meta={'num_object_columns': 3}),
+        Signal_Structure(dimension='data_integrity', name='mixed_type_columns', value={'columns': [], 'ratio': 0.0}, meta={'num_object_columns': 3})
+    ]
+    
+    # Run the logic orchestrator
+    test_results, overall_result = run_data_integrity(mocked_signals)
+    
+    print("=== TEST RESULTS ===")
+    for res in test_results:
+        print(res)
+        
+    print("\n=== OVERALL RESULT ===")
+    print(f"Status: {overall_result}")
+    
