@@ -27,18 +27,37 @@ DIMENSION = "data_integrity"
 # ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
-    if not isinstance(df, pd.DataFrame):
-        logger.error("Invalid input type", extra={"type": str(type(df))})
-        raise ValueError("Input must be a pandas DataFrame")
-
-    if df.empty:
-        logger.warning("Empty DataFrame detected")
+    pass
 
 
 # ------------------ SIGNALS ------------------
 
 def dataset_shape(df: pd.DataFrame) -> Signal_Structure:
     rows, cols = df.shape
+    
+    if rows is None:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="dataset_shape",
+            value={"rows": None, "cols" : int(cols)},
+            meta={"status" : "undefined" , "reason" : "no rows"}
+        )
+        
+    if cols is None:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="dataset_shape",
+            value={"rows": int(rows), "cols" : None},
+            meta={"status" : "undefined" , "reason" : "no columns"}
+        )
+    
+    if rows is None and cols is None:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="dataset_shape",
+            value=None,
+            meta={"status" : "undefined" , "reason" : "no rows and columns"}
+        )
 
     result = Signal_Structure(
         dimension=DIMENSION,
@@ -47,15 +66,21 @@ def dataset_shape(df: pd.DataFrame) -> Signal_Structure:
         meta=None
     )
 
-    logger.info("Computed dataset_shape")
     return result
 
 
 def global_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
     total_cells = df.shape[0] * df.shape[1]
-
-    ratio = float(df.isna().sum().sum() / total_cells) if total_cells > 0 else 0.0
     
+    if total_cells == 0.0:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="global_missing_ratio",
+            value=None,
+            meta={"status" : "undefined", "reason" : "no cells"}
+        )
+
+    ratio = float(df.isna().sum().sum() / total_cells)
 
     result = Signal_Structure(
         dimension=DIMENSION,
@@ -64,11 +89,19 @@ def global_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
         meta={"total_cells": total_cells}
     )
 
-    logger.info("Computed global_missing_ratio")
     return result
 
 
-def col_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
+def column_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
+    
+    if df.columns == 0:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="column_missing_ratio",
+            value=None,
+            meta={"status" : "valid", "error" : "no columns"}
+        )
+    
     ratio = df.isna().mean().to_dict()
     
     worst_ratio = max(ratio.values())                
@@ -83,7 +116,6 @@ def col_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
         meta={"num_columns": len(ratio)}
     )
 
-    logger.info("Computed column_missing_ratio", extra={"num_columns": len(ratio)})
     return result
 
 
@@ -93,28 +125,42 @@ def duplicated_ratio(df: pd.DataFrame) -> Signal_Structure:
     
     df_copy = df_copy.fillna("__MISSING__")   
     
-    ratio = float(df_copy.duplicated().mean()) if len(df) > 0 else 0.0
+    if len(df) == 0:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="duplicated_ratio",
+            value=None,
+            meta={"status" : "undefined" , "reason" : "dataframe length is 0"}
+        )     
+    
+    ratio = float(df_copy.duplicated().mean())
 
     result = Signal_Structure(
         dimension=DIMENSION,
-        name="duplicate_ratio",
+        name="duplicated_ratio",
         value=ratio,
         meta={"num_rows": len(df_copy)}
     )
 
-    logger.info("Computed duplicate_ratio")
     return result
 
 
-def constant_columns(df: pd.DataFrame) -> Signal_Structure:
+def constant_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
     constant_cols = df.columns[df.nunique(dropna=True) <= 1]
     
-    ratio = float(len(constant_cols) / df.shape[1]) if df.shape[1] > 0 else 0.0
+    if df.shape[1] == 0:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="constant_columns_ratio",
+            value=None,
+            meta={"status":"undefined" , "reason" : "no columns"}
+        )
+    
+    ratio = float(len(constant_cols) / df.shape[1])
             
-
     result = Signal_Structure(
         dimension=DIMENSION,
-        name="constant_columns",
+        name="constant_columns_ratio",
         value={
             "columns": list(constant_cols),
             "ratio": ratio,
@@ -122,7 +168,6 @@ def constant_columns(df: pd.DataFrame) -> Signal_Structure:
         meta={"total_columns": df.shape[1]}
     )
 
-    logger.info("Computed constant_columns", extra={"count": len(constant_cols)})
     return result
 
 
@@ -148,15 +193,22 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
         meta={"num_object_columns": len(obj_cols.columns)}
     )
 
-    logger.info("Computed hidden_missing_ratio", extra={"columns_checked": len(hidden_counts)})
     return result
 
 
-def mixed_type_columns(df: pd.DataFrame) -> Signal_Structure:
+def mixed_type_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
     mixed_cols = []
     obj_cols = df.select_dtypes(include="object")
     
     ignore_tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
+    
+    if df.shape[1] == 0:
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="mixed_type_columns_ratio",
+            value=None,
+            meta={"status" : "undefined", "reason" : "no columns"}
+        )
 
     for col in obj_cols:
         series = df[col].astype(str).str.strip().str.lower()
@@ -172,20 +224,15 @@ def mixed_type_columns(df: pd.DataFrame) -> Signal_Structure:
         if has_numeric and has_non_numeric:
             mixed_cols.append(col)
 
-    ratio = len(mixed_cols) / df.shape[1] if df.shape[1] > 0 else 0.0
+    ratio = len(mixed_cols) / df.shape[1]
 
 
     result = Signal_Structure(
         dimension=DIMENSION,
-        name="mixed_type_columns",
+        name="mixed_type_columns_ratio",
         value={"columns": mixed_cols, "ratio": ratio},
         meta={"num_object_columns": len(obj_cols.columns)}
     )
-    
-    if mixed_cols:
-        logger.warning("Mixed type columns detected", extra={"columns": mixed_cols})
-    else:
-        logger.info("No mixed type columns detected")
 
     return result
 
@@ -195,22 +242,43 @@ def mixed_type_columns(df: pd.DataFrame) -> Signal_Structure:
 SIGNALS_REGISTRY = [
     dataset_shape,
     global_missing_ratio,
-    col_missing_ratio,
+    column_missing_ratio,
     duplicated_ratio,
-    constant_columns,
+    constant_columns_ratio,
     hidden_missing_ratio,
-    mixed_type_columns,
+    mixed_type_columns_ratio,
 ]
 
+REQUIRED_SIGNALS = {
+    "dataset_shape" : (dict, type(None)),
+    "global_missing_ratio" : (float, type(None)),   
+    "column_missing_ratio" : (dict, type(None)),
+    "duplicated_ratio" : (float, type(None)),
+    "constant_columns_ratio" : (float, type(None)),
+    "hidden_missing_ratio" : dict,
+    "mixed_type_columns_ratio" : (dict, type(None))
+}
 
 def run_signal_extraction(df: pd.DataFrame) -> List[Signal_Structure]:
-    validate_data(df)
+    validation = validate_data(df)
+    
+    if validation["status"] == "fail":
+        logger.error("Data integrity validation failed: ", extra={"reason" : validation["reason"]})
+        
+        return Signal_Structure(
+            dimension=DIMENSION,
+            name="data_integrity",
+            value=None,
+            meta={"status" : "error" , "reason" : validation["reason"]}
+        )
+        
 
     results: List[Signal_Structure] = []
 
     for signal_fn in SIGNALS_REGISTRY:
         try:
             result = signal_fn(df)
+            logger.debug(f"{signal_fn.__name__} success")
             results.append(result)
 
         except Exception as e:

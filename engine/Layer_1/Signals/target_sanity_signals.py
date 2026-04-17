@@ -86,11 +86,19 @@ def target_missing_ratio(y: pd.Series) -> Structure:
 
 def target_variance(y: pd.Series) -> Structure:
     y_numeric = pd.to_numeric(y, errors="coerce").dropna()
-
-    variance = float(np.var(y_numeric)) if len(y_numeric) > 0 else None
     
-    target_range = float(np.max(y_numeric) - np.min(y_numeric)) if len(y_numeric) > 0 else None
+    if len(y_numeric) == 0:
+        return Structure(
+        dimension=DIMENSION,
+        name="target_variance",
+        value=None,
+        meta={"status": "valid", "reason": "no numeric data"}
+    )
 
+    variance = float(np.var(y_numeric))
+    
+    target_range = float(np.max(y_numeric) - np.min(y_numeric))
+        
     result = Structure(
         dimension=DIMENSION,
         name="target_variance",
@@ -102,7 +110,7 @@ def target_variance(y: pd.Series) -> Structure:
 
 
 def target_unique_count(y: pd.Series) -> Structure:
-
+    
     unique_count = int(y.nunique())
 
     result = Structure(
@@ -118,9 +126,17 @@ def target_unique_count(y: pd.Series) -> Structure:
 def class_imbalance_score(y: pd.Series) -> Structure:
 
     if len(y) == 0:
-        score = None
-    else:
-        score = float(y.value_counts(normalize=True).iloc[0])
+        return Structure(
+            dimension=DIMENSION,
+            name="class_imbalance_score",
+            value=None,
+            meta={
+                "status": "valid",
+                "reason": "empty target"
+            }
+        )
+    
+    score = float(y.value_counts(normalize=True).iloc[0])
 
     result = Structure(
         dimension=DIMENSION,
@@ -156,11 +172,11 @@ SIGNALS_REGISTRY = [
 ]
 
 REQUIRED_SIGNALS = {
+    "dataset_shape": dict,
     "target_missing_ratio": float,
-    "target_variance": dict,
+    "target_variance": (dict, type(None)),
     "target_unique_count": int,
     "class_imbalance_score": (float, type(None)),
-    "dataset_shape": dict,
 }
 
 
@@ -173,14 +189,12 @@ def run_target_signals(y: pd.Series) -> List[Structure]:
     if validation["status"] == "fail":
         logger.error("Target validation failed", extra={"reason": validation["reason"]})
 
-        return [
-            Structure(
+        return Structure(
                 dimension=DIMENSION,
                 name="target_validation",
                 value=None,
-                meta={"status": "fail", "reason": validation["reason"]}
+                meta={"status": "error", "reason": validation["reason"]}
             )
-        ]
 
     results = []
 

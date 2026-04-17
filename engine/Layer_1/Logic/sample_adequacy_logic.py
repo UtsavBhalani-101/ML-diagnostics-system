@@ -2,6 +2,7 @@ import numpy as np
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
+from engine.Layer_1.Signals.sample_adequacy_signals import Structure, REQUIRED_SIGNALS
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -12,21 +13,56 @@ logger = logging.getLogger(__name__)
 class TestResult:
     dimension: str
     name: str
-    status: str
+    label: str
     reason: str
     risk: float
     metrics: Optional[Dict] = None
 
 
+@dataclass(frozen=True)
+class OverallResult:
+    dimension: str
+    status: str
+    reason: str
+
 DIMENSION = "sample_adequacy"
 
+# --------------------------- signal mapping ---------------------------
 
-def validate_sample_signals(signals: dict):
+def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
+    signal_map = {}
+
+    for s in signals:
+        if s.name in signal_map:
+            raise ValueError(f"Duplicate signal detected: {s.name}")
+        signal_map[s.name] = s
+
+    return signal_map
+
+# --------------------------- validate signals contract and sample signals ---------------------------
+
+def validate_signals_contract(signals: List[Structure]):
+    signal_map = {s.name: s for s in signals}
+
+    missing = set(REQUIRED_SIGNALS.keys()) - set(signal_map.keys())
+    if missing:
+        raise ValueError(f"Missing signals: {missing}")
+
+    for name, expected_type in REQUIRED_SIGNALS.items():
+        value = signal_map[name].value
+
+        if not isinstance(value, expected_type):
+            raise TypeError(
+                f"Signal '{name}' has invalid type. "
+                f"Expected {expected_type}, got {type(value)}"
+            )
+            
+
+def validate_sample_signals(signals: List[Structure]):
     required = ["rows", "cols"]
 
     for key in required:
         if key not in signals:
-            logger.error(f"Missing signal: {key}")
             raise ValueError(f"Missing required signal: {key}")
 
     rows = signals["rows"]
@@ -39,112 +75,137 @@ def validate_sample_signals(signals: dict):
     if cols == 0:
         logger.warning("Zero columns detected")
 
-    logger.info(f"Validation passed: rows={rows}, cols={cols}")
+
+# --------------------------- Signals ---------------------------
 
 
-def low_sample_risk(signals):
+def low_sample_risk(signals: Dict[str, Structure]) -> TestResult:
     n = signals["rows"]
     d = signals["cols"]
 
-    if d == 0:
-        logger.warning("Division by zero in sample-feature ratio")
-        return 1.0
+    if n is None or d is None:
+        return TestResult(
+            dimension=DIMENSION,
+            name="low_sample_risk",
+            label="ERROR",
+            reason="rows or counts are 0",
+            risk=1.0,
+            metrics={"status" : "undefined"}
+        )
 
     ratio = n / d
     risk = np.exp(-ratio / 5)
+    
+    if risk < 0.2:
+        label = "SAFE"
+    elif risk < 0.4:
+        label = "WARNING"
+    else:
+        label = "CRITICAL"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="low_sample_risk",
+        label=label,
+        reason="None",
+        risk=risk,
+        metrics=None
+    )
 
-    logger.info(f"sample_feature_ratio={ratio:.2f}, risk={risk:.3f}")
-    return min(risk, 1.0)
+    return result
 
 
-def sample_size_risk(signals):
+def sample_size_risk(signals: Dict[str, Structure]) -> TestResult:
     n = signals["rows"]
     risk = np.exp(-n / 300)
 
-    logger.info(f"sample_size={n}, risk={risk:.3f}")
-    return min(risk, 1.0)
-
-
-def aggregate_sample_adequacy(signals):
-    dominant_risks = {
-        "low_sample": low_sample_risk(signals),
-    }
-
-    additive_risks = {
-        "sample_size": sample_size_risk(signals),
-    }
-
-    dominant_max = max(dominant_risks.values()) if dominant_risks else 0.0
-
-    additive_values = list(additive_risks.values())
-    additive_total = sum(additive_values) / len(additive_values) if additive_values else 0.0
-
-    total_risk = max(dominant_max, additive_total)
-
-    logger.info(
-        f"Aggregation | dominant={dominant_max:.3f} "
-        f"additive={additive_total:.3f} "
-        f"total={total_risk:.3f}"
+    if risk < 0.2:
+        label = "SAFE"
+    elif risk < 0.4:
+        label = "WARNING"
+    else:
+        label = "CRITICAL"
+        
+    result = TestResult(
+        dimension=DIMENSION,
+        name="sample_size_risk",
+        label=label,
+        reason="None",
+        risk=risk,
+        metrics=None
     )
 
-    return total_risk, {
-        "dominant": dominant_risks,
-        "additive": additive_risks,
-        "dominant_max": dominant_max,
-        "additive_total": additive_total,
-    }
+LOGIC_REGISTRY = [
+    low_sample_risk,
+    sample_size_risk
+]
 
+# --------------------------- Aggregate ---------------------------
 
-def decision_from_risk(total_risk):
-    if total_risk < 0.3:
-        status = "SAFE"
-        reason = "Sufficient sample size relative to feature space. Low structural risk."
-    elif total_risk < 0.7:
-        status = "WARNING"
-        reason = "Sample support is limited relative to the feature space."
-    else:
-        status = "CRITICAL"
-        reason = "Too few samples for the feature space; overfitting risk is high."
-
-    logger.info(f"Decision: {status}")
-    return status, reason
-
-
-def run_sample_adequacy(signals: dict) -> TestResult:
-    logger.info("Running sample adequacy checks")
-    validate_sample_signals(signals)
-
+def aggregate_sample_adequacy(signals: List[TestResult]) -> TestResult:
     try:
-        total_risk, breakdown = aggregate_sample_adequacy(signals)
-        status, reason = decision_from_risk(total_risk)
-
-        n = signals["rows"]
-        d = signals["cols"]
-        ratio = n / d if d > 0 else None
-
-        result = TestResult(
+        status = "PROCEED"
+        
+        for res in results:
+            if res.label == "CRITICAL":
+                status = "STOP"
+                break
+            elif res.label == "WARNING" and status != "STOP":
+                status = "REVIEW"
+        
+        result = OverallResult(
             dimension=DIMENSION,
-            name="sample_adequacy_overall",
             status=status,
-            reason=reason,
-            risk=round(total_risk, 3),
-            metrics={
-                "total_risk": total_risk,
-                "risk_breakdown": breakdown,
-                "sample_feature_ratio": ratio,
-                "rows": n,
-                "cols": d,
-            },
+            reason="None"
+        )
+        
+    except Exception as e:
+        result = OverallResult(
+            dimension=DIMENSION,
+            status="ERROR",
+            reason="Some internal problem occured in calculating overall result"
         )
 
-        logger.info(f"Final result: {result}")
-        return result
-    except Exception as e:
-        logger.error(
-            "Signal evaluation failed for sample adequacy",
-            extra={"error": str(e)},
-        )
-        raise
+    return result
+
+
+# --------------------------- Orchestrator ---------------------------
+
+
+def run_sample_adequacy(signals: List[Structure]) -> tuple[List[TestResult], OverallResult]:
+    
+        # Step 1: build map
+
+    signal_map = build_signal_map(signals)
+
+    # Step 2: validate contract
+    validate_signals_contract(signals)
+
+    results: List[TestResult] = []
+    
+    for logic_fn in LOGIC_REGISTRY:
+        try: 
+            result = logic_fn(signal_map)
+            results.append(result)
+            
+            logger.debug(f"{logic_fn.__name__} success")
+
+        except Exception as e:
+            logger.error("Signal failed", extra={
+                "signal": logic_fn.__name__,
+                "error": str(e)
+            })
+            
+            results.append(
+                TestResult(
+                    dimension=DIMENSION,
+                    name=logic_fn.__name__,
+                    label="ERROR",
+                    reason=str(e),
+                    risk=1.0,
+                    metrics={"error": str(e)}
+                )
+            )
 
 
 if __name__ == "__main__":

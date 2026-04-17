@@ -105,7 +105,7 @@ def duplicate_risk(signals: List[Signal_Structure]) -> TestResult:
     return result
 
 def constant_risk(signals: List[Signal_Structure]) -> TestResult:
-    const_signal = next(s for s in signals if s.name == "constant_columns")
+    const_signal = next(s for s in signals if s.name == "constant_columns_ratio")
     ratio = const_signal.value["ratio"]
     
     if ratio == 0.0:
@@ -151,7 +151,7 @@ def hidden_missing_risk(signals: List[Signal_Structure]) -> TestResult:
     return result
 
 def mixed_type_risk(signals: List[Signal_Structure]) -> TestResult:
-    mixed_signal = next(s for s in signals if s.name == "mixed_type_columns")
+    mixed_signal = next(s for s in signals if s.name == "mixed_type_columns_ratio")
     ratio = mixed_signal.value['ratio']
     
     if ratio == 0:
@@ -244,9 +244,9 @@ if __name__ == "__main__":
         Signal_Structure(dimension='data_integrity', name='global_missing_ratio', value=0.0, meta={'total_cells': 30000}),
         Signal_Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'cat_1': 0.0, 'cat_2': 0.0, 'cat_3': 0.0}, 'worst_ratio': 0.0}, meta={'num_columns': 3}),
         Signal_Structure(dimension='data_integrity', name='duplicate_ratio', value=0.9976, meta={'num_rows': 10000}),
-        Signal_Structure(dimension='data_integrity', name='constant_columns', value={'columns': [], 'ratio': 0.0}, meta={'total_columns': 3}),
+        Signal_Structure(dimension='data_integrity', name='constant_columns_ratio', value={'columns': [], 'ratio': 0.0}, meta={'total_columns': 3}),
         Signal_Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'cat_1': 0.1534, 'cat_2': 0.0, 'cat_3': 0.0}, 'worst_ratio': 0.1534}, meta={'num_object_columns': 3}),
-        Signal_Structure(dimension='data_integrity', name='mixed_type_columns', value={'columns': [], 'ratio': 0.0}, meta={'num_object_columns': 3})
+        Signal_Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': [], 'ratio': 0.0}, meta={'num_object_columns': 3})
     ]
     
     # Run the logic orchestrator

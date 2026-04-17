@@ -100,7 +100,6 @@ def missing_risk(signals: Dict[str, Structure]) -> TestResult:
 def class_imbalance_risk(signals: Dict[str, Structure]) -> TestResult:
     imbalance_score = signals["class_imbalance_score"].value
     
-    
     if imbalance_score is None:
         return TestResult(
             dimension=DIMENSION,
@@ -108,6 +107,7 @@ def class_imbalance_risk(signals: Dict[str, Structure]) -> TestResult:
             label="ERROR",
             reason="Missing imbalance score",
             risk=1.0,
+            metrics={"status" : "undefined"}
         )
     
     if imbalance_score > 0.95:
@@ -140,6 +140,7 @@ def variance_risk(signals: Dict[str, Structure]) -> TestResult:
             label="ERROR",
             reason="Missing variance",
             risk=1.0,
+            metrics={"status" : "undefined"}
         )
     
     if target_range is None:
@@ -149,18 +150,17 @@ def variance_risk(signals: Dict[str, Structure]) -> TestResult:
             label="ERROR",
             reason="Missing target_range",
             risk=1.0,
+            metrics={"status" : "undefined"}
         )
 
     normalized_variance = variance / (target_range ** 2)    
     
-    if variance == 0.0:
+    if variance == 0.0 or target_range == 0:
         label = "CRITICAL"
-    
-    if target_range == 0:
-        label = "CRITICAL"
-        
+                
     elif normalized_variance < 1e-4:
         label = "WARNING"
+        
     else:
         label = "SAFE"
         
@@ -179,6 +179,16 @@ def variance_risk(signals: Dict[str, Structure]) -> TestResult:
 def evaluate_task_type(signals: Dict[str, Structure]) -> TestResult:
     unique_count = signals["target_unique_count"].value
     total = signals["dataset_shape"].value["rows"]
+    
+    if total == 0:
+        return TestResult(
+            dimension=DIMENSION,
+            name="task_type_inference",
+            label="ERROR",
+            reason="total rows are 0",
+            risk=1.0,
+            metrics={"status" : "undefined"},
+        )
 
     unique_ratio = unique_count / total if total > 0 else 0.0
 
@@ -215,7 +225,7 @@ def evaluate_task_type(signals: Dict[str, Structure]) -> TestResult:
         reason = "Task type inferred with high confidence"
 
     result = TestResult(
-        dimension="target_viability",
+        dimension=DIMENSION,
         name="task_type_inference",
         label=label,
         reason=reason,
@@ -238,6 +248,8 @@ LOGIC_REGISTRY = [
     evaluate_task_type
 ]
 
+# --------------------------- Aggregation ---------------------------
+
 
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
     
@@ -247,7 +259,8 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
         for res in results:
             if res.label == "CRITICAL":
                 status = "STOP"
-            elif res.label == "WARNING":
+                break
+            elif res.label == "WARNING" and status != "STOP":
                 status = "REVIEW"
         
         result = OverallResult(
@@ -264,6 +277,9 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
         )
 
     return result
+
+# --------------------------- Orchestrator ---------------------------
+
 
 def run_target_viability(signals: List[Structure]) -> tuple[List[TestResult], OverallResult]:
 
