@@ -1,3 +1,16 @@
+
+# ------------------ ASSUMPTIONS ------------------
+
+# * can I trust the data at all ?
+
+ASSUMPTIONS = [
+    "Data is supposed to be clean tabular data",
+    "Missingness is random, not systematic",
+    "Duplicates are accidental, not meaningful",
+    "Columns represent independent features, not logs/events"
+]
+
+
 from dataclasses import dataclass
 import logging
 from typing import Dict, List, Optional

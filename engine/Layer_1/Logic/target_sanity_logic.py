@@ -1,3 +1,16 @@
+
+# ------------------ ASSUMPTIONS ------------------
+
+# * Is the target even usable ?
+
+ASSUMPTIONS = [
+    "task : supervised",
+    "target : stationary (distribution stable)",
+    "Signal exists in data (not random noise)",
+    "classes are expected to be reasonably balance"
+]
+
+
 import sys
 import os
 
