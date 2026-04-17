@@ -8,11 +8,16 @@ import numpy as np
 import logging
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+
 from engine.Layer_1.Signals.target_sanity_signals import Structure, REQUIRED_SIGNALS
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+DIMENSION = "target_viability"
+
+
+# ------------------ RESULT STRUCTURES ------------------
 
 @dataclass(frozen=True)
 class TestResult:
@@ -22,7 +27,8 @@ class TestResult:
     reason: str
     risk: float
     metrics: Optional[Dict] = None
-    
+
+
 @dataclass(frozen=True)
 class OverallResult:
     dimension: str
@@ -30,10 +36,7 @@ class OverallResult:
     reason: str
 
 
-DIMENSION = "target_viability"
-
-
-# --------------------------- signal mapping ---------------------------
+# ------------------ SIGNAL ACCESS LAYER ------------------
 
 def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
     signal_map = {}
@@ -45,156 +48,145 @@ def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
 
     return signal_map
 
-# --------------------------- validate signals contract and target col ---------------------------
 
-def validate_signals_contract(signals: List[Structure]):
-    signal_map = {s.name: s for s in signals}
+def get_value(signal_map: Dict[str, Structure], name: str):
+    s = signal_map[name]
 
-    missing = set(REQUIRED_SIGNALS.keys()) - set(signal_map.keys())
-    if missing:
-        raise ValueError(f"Missing signals: {missing}")
+    if s.status != "ok":
+        raise ValueError(f"{name} unusable: {s.status}")
+
+    return s.value
+
+
+def get_optional(signal_map: Dict[str, Structure], name: str):
+    s = signal_map[name]
+
+    if s.status == "ok":
+        return s.value
+
+    return None
+
+
+# ------------------ CONTRACT VALIDATION ------------------
+
+def validate_signals_contract(signal_map: Dict[str, Structure]):
 
     for name, expected_type in REQUIRED_SIGNALS.items():
-        value = signal_map[name].value
+        s = signal_map.get(name)
 
-        if not isinstance(value, expected_type):
-            raise TypeError(
-                f"Signal '{name}' has invalid type. "
-                f"Expected {expected_type}, got {type(value)}"
-            )
-            
+        if s is None:
+            raise ValueError(f"Missing signal: {name}")
 
-
-def validate_target_signals(signals: List[Structure]):
-    pass
+        if s.status == "ok":
+            if not isinstance(s.value, expected_type):
+                raise TypeError(f"{name} must be {expected_type}")
 
 
-# --------------------------- Signals ---------------------------
+# ------------------ LOGIC FUNCTIONS ------------------
 
+def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    missing_ratio = get_value(signal_map, "target_missing_ratio")
 
-
-def missing_risk(signals: Dict[str, Structure]) -> TestResult:
-    missing_ratio = signals["target_missing_ratio"].value
-    
-    if missing_ratio == 1.0:
-        label = "CRITICAL"
-    elif missing_ratio >= 0.4:
+    if missing_ratio >= 0.4:
         label = "CRITICAL"
     elif missing_ratio > 0.1:
         label = "WARNING"
     else:
         label = "SAFE"
-    
-    result = TestResult(
-        dimension= DIMENSION,
-        name= "missing_risk",
+
+    return TestResult(
+        dimension=DIMENSION,
+        name="missing_risk",
         label=label,
-        reason="None",
-        risk=missing_ratio,
-        metrics=None
+        reason=f"Missing ratio = {missing_ratio}",
+        risk=missing_ratio
     )
-        
-    return result
 
 
-def class_imbalance_risk(signals: Dict[str, Structure]) -> TestResult:
-    imbalance_score = signals["class_imbalance_score"].value
-    
+def class_imbalance_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    imbalance_score = get_optional(signal_map, "class_imbalance_score")
+
     if imbalance_score is None:
         return TestResult(
             dimension=DIMENSION,
             name="class_imbalance_risk",
             label="ERROR",
-            reason="Missing imbalance score",
-            risk=1.0,
-            metrics={"status" : "undefined"}
+            reason="Imbalance score unavailable",
+            risk=1.0
         )
-    
+
     if imbalance_score > 0.95:
         label = "CRITICAL"
     elif imbalance_score > 0.8:
         label = "WARNING"
     else:
         label = "SAFE"
-        
-    result = TestResult(
+
+    return TestResult(
         dimension=DIMENSION,
-        name="class_imbalace_risk",
+        name="class_imbalance_risk",
         label=label,
-        reason="None",
-        risk=imbalance_score,
-        metrics=None
+        reason=f"Imbalance score = {imbalance_score}",
+        risk=imbalance_score
     )
-    
-    return result
 
 
-def variance_risk(signals: Dict[str, Structure]) -> TestResult:
-    variance = signals["target_variance"].value["variance"]
-    target_range = signals["target_variance"].value["target_range"]
-    
-    if variance is None:
-        return TestResult(
-            dimension=DIMENSION,
-            name="varaince_risk",
-            label="ERROR",
-            reason="Missing variance",
-            risk=1.0,
-            metrics={"status" : "undefined"}
-        )
-    
-    if target_range is None:
+def variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    variance_data = get_optional(signal_map, "target_variance")
+
+    if variance_data is None:
         return TestResult(
             dimension=DIMENSION,
             name="variance_risk",
             label="ERROR",
-            reason="Missing target_range",
-            risk=1.0,
-            metrics={"status" : "undefined"}
+            reason="Variance unavailable",
+            risk=1.0
         )
 
-    normalized_variance = variance / (target_range ** 2)    
-    
+    variance = variance_data["variance"]
+    target_range = variance_data["target_range"]
+
     if variance == 0.0 or target_range == 0:
         label = "CRITICAL"
-                
-    elif normalized_variance < 1e-4:
-        label = "WARNING"
-        
+        risk = 1.0
+        reason = "Zero variance or range"
+
     else:
-        label = "SAFE"
-        
-    result = TestResult(
+        normalized_variance = variance / (target_range ** 2)
+
+        if normalized_variance < 1e-4:
+            label = "WARNING"
+        else:
+            label = "SAFE"
+
+        risk = normalized_variance
+        reason = f"Normalized variance = {normalized_variance:.6f}"
+
+    return TestResult(
         dimension=DIMENSION,
         name="variance_risk",
         label=label,
-        reason="None",
-        risk=normalized_variance,
-        metrics=None
-    )   
-
-    return result
+        reason=reason,
+        risk=risk
+    )
 
 
-def evaluate_task_type(signals: Dict[str, Structure]) -> TestResult:
-    unique_count = signals["target_unique_count"].value
-    total = signals["dataset_shape"].value["rows"]
-    
+def evaluate_task_type(signal_map: Dict[str, Structure]) -> TestResult:
+    unique_count = get_value(signal_map, "target_unique_count")
+    dataset = get_value(signal_map, "dataset_shape")
+
+    total = dataset["rows"]
+
     if total == 0:
         return TestResult(
             dimension=DIMENSION,
             name="task_type_inference",
             label="ERROR",
-            reason="total rows are 0",
-            risk=1.0,
-            metrics={"status" : "undefined"},
+            reason="No data",
+            risk=1.0
         )
 
-    unique_ratio = unique_count / total if total > 0 else 0.0
-
-    # -------------------------
-    # HARD DECISION ZONES
-    # -------------------------
+    unique_ratio = unique_count / total
 
     if unique_count <= 20:
         task = "classification"
@@ -208,23 +200,17 @@ def evaluate_task_type(signals: Dict[str, Structure]) -> TestResult:
         task = "ambiguous"
         confidence = 0.5
 
-    # -------------------------
-    # FAILURE BOUNDARIES
-    # -------------------------
-
     if confidence < 0.4:
         label = "UNACCEPTABLE"
-        reason = "Unable to confidently determine task type"
-
+        reason = "Low confidence in task type"
     elif confidence < 0.7:
         label = "CONCERN"
-        reason = "Task type is ambiguous"
-
+        reason = "Ambiguous task type"
     else:
         label = "ACCEPTABLE"
-        reason = "Task type inferred with high confidence"
+        reason = "Clear task type"
 
-    result = TestResult(
+    return TestResult(
         dimension=DIMENSION,
         name="task_type_inference",
         label=label,
@@ -233,12 +219,9 @@ def evaluate_task_type(signals: Dict[str, Structure]) -> TestResult:
         metrics={
             "task_type": task,
             "confidence": round(confidence, 3),
-            "unique_count": unique_count,
             "unique_ratio": round(unique_ratio, 4),
-        },
-    )    
-        
-    return result
+        }
+    )
 
 
 LOGIC_REGISTRY = [
@@ -248,93 +231,66 @@ LOGIC_REGISTRY = [
     evaluate_task_type
 ]
 
-# --------------------------- Aggregation ---------------------------
 
+# ------------------ AGGREGATION ------------------
 
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
-    
-    try:
-        status = "PROCEED"
-        
-        for res in results:
-            if res.label == "CRITICAL":
-                status = "STOP"
-                break
-            elif res.label == "WARNING" and status != "STOP":
-                status = "REVIEW"
-        
-        result = OverallResult(
-            dimension=DIMENSION,
-            status=status,
-            reason="None"
-        )
-        
-    except Exception as e:
-        result = OverallResult(
-            dimension=DIMENSION,
-            status="ERROR",
-            reason="Some internal problem occured in calculating overall result"
-        )
 
-    return result
+    status = "PROCEED"
 
-# --------------------------- Orchestrator ---------------------------
+    for r in results:
+        if r.label == "CRITICAL":
+            return OverallResult(DIMENSION, "STOP", "Critical issue detected")
+        elif r.label == "WARNING":
+            status = "REVIEW"
+
+    return OverallResult(DIMENSION, status, "Aggregated from tests")
 
 
-def run_target_viability(signals: List[Structure]) -> tuple[List[TestResult], OverallResult]:
+# ------------------ ORCHESTRATOR ------------------
 
-        # Step 1: build map
+def run_target_viability(signals: List[Structure]):
+
     signal_map = build_signal_map(signals)
 
-    # Step 2: validate contract
-    validate_signals_contract(signals)
+    validate_signals_contract(signal_map)
 
-    results: List[TestResult] = []
-    
-    for logic_fn in LOGIC_REGISTRY:
-        try: 
-            result = logic_fn(signal_map)
-            results.append(result)
-            
-            logger.debug(f"{logic_fn.__name__} success")
+    results = []
 
+    for fn in LOGIC_REGISTRY:
+        try:
+            results.append(fn(signal_map))
         except Exception as e:
-            logger.error("Signal failed", extra={
-                "signal": logic_fn.__name__,
-                "error": str(e)
-            })
-            
             results.append(
                 TestResult(
                     dimension=DIMENSION,
-                    name=logic_fn.__name__,
+                    name=fn.__name__,
                     label="ERROR",
                     reason=str(e),
-                    risk=1.0,
-                    metrics={"error": str(e)}
+                    risk=1.0
                 )
             )
-            
-    
+
     overall = aggregate_risk(results)
-    
+
     return results, overall
 
 if __name__ == "__main__":
-    mock_Signals = [
-            Structure(dimension='target_viability', name='target_missing_ratio', value=0.08333333333333333, meta={'n_samples': 12}),
-            Structure(dimension='target_viability', name='target_variance', value={'variance': 0.24000000000000005, 'target_range': 1.0}, meta={'valid_numeric_samples': 10}),
-            Structure(dimension='target_viability', name='target_unique_count', value=3, meta={'n_samples': 12}),
-            Structure(dimension='target_viability', name='class_imbalance_score', value=0.5454545454545454, meta={'n_samples': 12}),
-            Structure(dimension='target_viability', name='dataset_shape', value={'rows': 12, 'cols': 1}, meta={'n_samples': 12})
-        ]
     
-    validate_signals_contract(mock_Signals)
+    mock_Signals = [Structure(dimension='target_viability', name='target_missing_ratio', value=0.08333333333333333, status='ok', meta={'n_samples': 12}),
+        Structure(dimension='target_viability', name='target_variance', value={'variance': 0.24000000000000005, 'target_range': 1.0}, status='ok', meta={'valid_numeric_samples': 10}),
+        Structure(dimension='target_viability', name='target_unique_count', value=3, status='ok', meta={'n_samples': 12}),
+        Structure(dimension='target_viability', name='class_imbalance_score', value=0.5454545454545454, status='ok', meta={'n_samples': 12}),
+        Structure(dimension='target_viability', name='dataset_shape', value={'rows': 12, 'cols': 1}, status='ok', meta={'n_samples': 12})]
+
+    signal_mapped = build_signal_map(mock_Signals)
     
-    validate_target_signals(mock_Signals)
+    # validate_signals_contract(signal_mapped)
+        
+    # result, overall = run_target_viability(signal_mapped)
     
-    result, overall = run_target_viability(mock_Signals)
+    # print(result)
+    # print(overall)
     
-    print(result)
-    print(overall)
+    print(type(mock_Signals))
     

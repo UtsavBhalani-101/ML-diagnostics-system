@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, List
 
 
-# ------------------ LOGGING ------------------
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -18,79 +16,91 @@ class Structure:
     dimension: str
     name: str
     value: Any
+    status: str  # "ok", "no_value", "error"
     meta: Optional[Dict] = None
 
 
 DIMENSION = "sample_adequacy"
 
 
+# ------------------ ENFORCEMENT ------------------
+
+def enforce(signal: Structure):
+    if signal.status == "ok" and signal.value is None:
+        raise ValueError(f"{signal.name}: ok but value is None")
+
+    if signal.status in ("no_value", "error") and signal.value is not None:
+        raise ValueError(f"{signal.name}: invalid state mismatch")
+
+
 # ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
-    pass
+    if df is None or df.shape[0] == 0:
+        return {"status": "fail", "reason": "Empty dataset"}
 
+    return {"status": "pass"}
 
 
 # ------------------ SIGNALS ------------------
 
 def dataset_size(df: pd.DataFrame) -> Structure:
-    size = int(df.shape[0])
+    n = int(df.shape[0])
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="dataset_size",
-        value=size,
-        meta={"n_rows": size}
+        value=n,
+        status="ok",
+        meta={"n_rows": n}
     )
-
-    return result
+    enforce(signal)
+    return signal
 
 
 def feature_count(df: pd.DataFrame) -> Structure:
-    count = int(df.shape[1])
+    d = int(df.shape[1])
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="feature_count",
-        value=count,
-        meta={"n_features": count}
+        value=d,
+        status="ok",
+        meta={"n_features": d}
     )
-
-    return result
+    enforce(signal)
+    return signal
 
 
 def n_to_d_ratio(df: pd.DataFrame) -> Structure:
     n = df.shape[0]
     d = df.shape[1]
-    
+
     if d == 0:
-        return Structure(
+        signal = Structure(
             dimension=DIMENSION,
             name="n_to_d_ratio",
-            value=ratio,
-            meta={
-                "n_rows": n,
-                "n_features": d
-            }
+            value=None,
+            status="no_value",
+            meta={"n_rows": n, "n_features": d}
         )
-        
+        enforce(signal)
+        return signal
 
     ratio = float(n / d)
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="n_to_d_ratio",
         value=ratio,
-        meta={
-            "n_rows": n,
-            "n_features": d
-        }
+        status="ok",
+        meta={"n_rows": n, "n_features": d}
     )
+    enforce(signal)
+    return signal
 
-    return result
 
-
-# ------------------ ORCHESTRATOR ------------------
+# ------------------ REGISTRY ------------------
 
 SIGNALS_REGISTRY = [
     dataset_size,
@@ -98,45 +108,43 @@ SIGNALS_REGISTRY = [
     n_to_d_ratio
 ]
 
+
 REQUIRED_SIGNALS = {
-    "dataset_size" : int,
-    "feature_count" : float,
-    "n_to_d_ratio" : (float, type(None))
+    "dataset_size": int,
+    "feature_count": int,
+    "n_to_d_ratio": float,
 }
 
 
+# ------------------ ORCHESTRATOR ------------------
+
 def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
-    
-    validate = validate_data(df)
-    
-    if validate["status"] == "fail":
-        logger.error("Data integrity validation failed: ", extra={"reason" : validate["reason"]})
-        
-        return Structure(
-            dimension=DIMENSION,
-            name="sample_adequacy",
-            value=None,
-            meta={"status" : "error" , "reason" : validate["reason"]}
-        )
+
+    validation = validate_data(df)
+
+    if validation["status"] == "fail":
+        return [
+            Structure(
+                dimension=DIMENSION,
+                name="data_validation",
+                value=None,
+                status="error",
+                meta={"reason": validation["reason"]}
+            )
+        ]
 
     results = []
 
-    for signal_fn in SIGNALS_REGISTRY:
+    for fn in SIGNALS_REGISTRY:
         try:
-            res = signal_fn(df)
-            logger.debug(f"{signal_fn.__name__} success")
-            results.append(res)
-
+            results.append(fn(df))
         except Exception as e:
-            logger.error(
-                f"Signal failed: {signal_fn.__name__}",
-                extra={"signal": signal_fn.__name__, "error": str(e)}
-            )
             results.append(
                 Structure(
                     dimension=DIMENSION,
-                    name=signal_fn.__name__,
+                    name=fn.__name__,
                     value=None,
+                    status="error",
                     meta={"error": str(e)}
                 )
             )
@@ -144,28 +152,4 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
     return results
 
 if __name__ == "__main__":
-    
-    # run_sample_adequacy(df)
-    N_SAMPLES = 10000
-    
-    def build_categorical_clean() -> pd.DataFrame:
-        np.random.seed(42)
-        df = pd.DataFrame({
-            "cat_1": np.random.choice(["A", "B", "C"], size=N_SAMPLES),
-            "cat_2": np.random.choice(["X", "Y"], size=N_SAMPLES),
-            "cat_3": np.random.choice(["low", "medium", "high"], size=N_SAMPLES),
-        })
-        return df
-    
-    def build_categorical_hidden_missing() -> pd.DataFrame:
-        df = build_categorical_clean().astype(object)
-        np.random.seed(42)
-        mask = np.random.rand(N_SAMPLES) < 0.15
-        df.loc[mask, "cat_1"] = "NA"
-        return df
-    
-    df = build_categorical_hidden_missing()
-    
-    results = run_sample_adequacy(df)
-    for r in results:
-        print(r)
+    run_sample_adequacy()

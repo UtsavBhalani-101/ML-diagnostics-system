@@ -18,10 +18,21 @@ class Structure:
     dimension: str
     name: str
     value: Any
+    status: str  # "ok", "no_value", "error"
     meta: Optional[Dict] = None
 
 
 DIMENSION = "target_viability"
+
+
+# ------------------ ENFORCEMENT ------------------
+
+def enforce(signal: Structure):
+    if signal.status == "ok" and signal.value is None:
+        raise ValueError(f"{signal.name}: status ok but value is None")
+
+    if signal.status in ("no_value", "error") and signal.value is not None:
+        raise ValueError(f"{signal.name}: has value but status={signal.status}")
 
 
 # ------------------ CONSTANTS ------------------
@@ -33,10 +44,8 @@ HIDDEN_MISSING = {"na", "n/a", "null", "none", "", " ", "?", "unknown"}
 
 def clean_target(y) -> pd.Series:
     y = pd.Series(y)
-
     y_clean = y.astype(str).str.strip().str.lower()
     y_clean = y_clean.replace(HIDDEN_MISSING, np.nan)
-
     return y_clean
 
 
@@ -45,123 +54,120 @@ def is_mixed_type(y: pd.Series) -> bool:
     return len(types) > 1
 
 
-
 # ------------------ VALIDATION ------------------
 
 def validate_target(y: pd.Series) -> Dict:
 
     if y.isna().all():
-        return {
-            "status": "fail",
-            "reason": "Target is entirely missing"
-        }
+        return {"status": "fail", "reason": "Target is entirely missing"}
 
     if is_mixed_type(y):
-        return {
-            "status": "fail",
-            "reason": "Target column has mixed data types"
-        }
+        return {"status": "fail", "reason": "Target column has mixed data types"}
 
-    return {
-        "status": "pass",
-        "y": y
-    }
+    return {"status": "pass", "y": y}
 
 
 # ------------------ SIGNALS ------------------
 
 def target_missing_ratio(y: pd.Series) -> Structure:
-
     ratio = float(y.isna().mean())
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="target_missing_ratio",
         value=ratio,
+        status="ok",
         meta={"n_samples": len(y)}
     )
 
-    return result
+    enforce(signal)
+    return signal
 
 
 def target_variance(y: pd.Series) -> Structure:
     y_numeric = pd.to_numeric(y, errors="coerce").dropna()
-    
+
     if len(y_numeric) == 0:
-        return Structure(
-        dimension=DIMENSION,
-        name="target_variance",
-        value=None,
-        meta={"status": "valid", "reason": "no numeric data"}
-    )
+        signal = Structure(
+            dimension=DIMENSION,
+            name="target_variance",
+            value=None,
+            status="no_value",
+            meta={"valid_numeric_samples": 0}
+        )
+        enforce(signal)
+        return signal
 
     variance = float(np.var(y_numeric))
-    
     target_range = float(np.max(y_numeric) - np.min(y_numeric))
-        
-    result = Structure(
+
+    signal = Structure(
         dimension=DIMENSION,
         name="target_variance",
-        value={"variance" : variance, "target_range" : target_range},
+        value={"variance": variance, "target_range": target_range},
+        status="ok",
         meta={"valid_numeric_samples": len(y_numeric)}
     )
 
-    return result
+    enforce(signal)
+    return signal
 
 
 def target_unique_count(y: pd.Series) -> Structure:
-    
     unique_count = int(y.nunique())
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="target_unique_count",
         value=unique_count,
+        status="ok",
         meta={"n_samples": len(y)}
     )
 
-    return result
+    enforce(signal)
+    return signal
 
 
 def class_imbalance_score(y: pd.Series) -> Structure:
-
     if len(y) == 0:
-        return Structure(
+        signal = Structure(
             dimension=DIMENSION,
             name="class_imbalance_score",
             value=None,
-            meta={
-                "status": "valid",
-                "reason": "empty target"
-            }
+            status="error",
+            meta={"n_samples": 0}
         )
-    
+        enforce(signal)
+        return signal
+
     score = float(y.value_counts(normalize=True).iloc[0])
 
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="class_imbalance_score",
         value=score,
+        status="ok",
         meta={"n_samples": len(y)}
     )
 
-    return result
+    enforce(signal)
+    return signal
 
 
 def dataset_shape(y: pd.Series) -> Structure:
-
-    result = Structure(
+    signal = Structure(
         dimension=DIMENSION,
         name="dataset_shape",
         value={"rows": len(y), "cols": 1},
+        status="ok",
         meta={"n_samples": len(y)}
     )
 
-    return result
+    enforce(signal)
+    return signal
 
 
-
-# ------------------ ORCHESTRATOR ------------------
+# ------------------ REGISTRY ------------------
 
 SIGNALS_REGISTRY = [
     target_missing_ratio,
@@ -172,29 +178,31 @@ SIGNALS_REGISTRY = [
 ]
 
 REQUIRED_SIGNALS = {
-    "dataset_shape": dict,
     "target_missing_ratio": float,
-    "target_variance": (dict, type(None)),
+    "target_variance": dict,
     "target_unique_count": int,
-    "class_imbalance_score": (float, type(None)),
+    "class_imbalance_score": float,
+    "dataset_shape": dict,
 }
 
 
-def run_target_signals(y: pd.Series) -> List[Structure]:
-    
-    y_clean = clean_target(y)
+# ------------------ ORCHESTRATOR ------------------
 
+def run_target_signals(y: pd.Series) -> List[Structure]:
+
+    y_clean = clean_target(y)
     validation = validate_target(y_clean)
 
     if validation["status"] == "fail":
-        logger.error("Target validation failed", extra={"reason": validation["reason"]})
-
-        return Structure(
+        return [
+            Structure(
                 dimension=DIMENSION,
                 name="target_validation",
                 value=None,
-                meta={"status": "error", "reason": validation["reason"]}
+                status="error",
+                meta={"reason": validation["reason"]}
             )
+        ]
 
     results = []
 
@@ -215,7 +223,8 @@ def run_target_signals(y: pd.Series) -> List[Structure]:
                     dimension=DIMENSION,
                     name=signal_fn.__name__,
                     value=None,
-                    meta={"status" : "error" ,"error": str(e)}
+                    status="error",
+                    meta={"error": str(e)}
                 )
             )
 

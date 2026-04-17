@@ -1,13 +1,18 @@
 import numpy as np
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import List, Dict, Optional
+
 from engine.Layer_1.Signals.sample_adequacy_signals import Structure, REQUIRED_SIGNALS
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+DIMENSION = "sample_adequacy"
+
+
+# ------------------ RESULT STRUCTURES ------------------
 
 @dataclass(frozen=True)
 class TestResult:
@@ -25,99 +30,87 @@ class OverallResult:
     status: str
     reason: str
 
-DIMENSION = "sample_adequacy"
 
-# --------------------------- signal mapping ---------------------------
+# ------------------ SIGNAL ACCESS ------------------
 
 def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
     signal_map = {}
-
     for s in signals:
         if s.name in signal_map:
-            raise ValueError(f"Duplicate signal detected: {s.name}")
+            raise ValueError(f"Duplicate signal: {s.name}")
         signal_map[s.name] = s
-
     return signal_map
 
-# --------------------------- validate signals contract and sample signals ---------------------------
 
-def validate_signals_contract(signals: List[Structure]):
-    signal_map = {s.name: s for s in signals}
+def get_value(signal_map: Dict[str, Structure], name: str):
+    s = signal_map[name]
 
-    missing = set(REQUIRED_SIGNALS.keys()) - set(signal_map.keys())
-    if missing:
-        raise ValueError(f"Missing signals: {missing}")
+    if s.status != "ok":
+        raise ValueError(f"{name} unusable: {s.status}")
 
+    return s.value
+
+
+def get_optional(signal_map: Dict[str, Structure], name: str):
+    s = signal_map[name]
+
+    if s.status == "ok":
+        return s.value
+
+    return None
+
+
+# ------------------ CONTRACT VALIDATION ------------------
+
+def validate_signals_contract(signal_map: Dict[str, Structure]):
     for name, expected_type in REQUIRED_SIGNALS.items():
-        value = signal_map[name].value
+        s = signal_map.get(name)
 
-        if not isinstance(value, expected_type):
-            raise TypeError(
-                f"Signal '{name}' has invalid type. "
-                f"Expected {expected_type}, got {type(value)}"
-            )
-            
+        if s is None:
+            raise ValueError(f"Missing signal: {name}")
 
-def validate_sample_signals(signals: List[Structure]):
-    required = ["rows", "cols"]
-
-    for key in required:
-        if key not in signals:
-            raise ValueError(f"Missing required signal: {key}")
-
-    rows = signals["rows"]
-    cols = signals["cols"]
-
-    if rows < 0 or cols < 0:
-        logger.error("Invalid rows/cols values")
-        raise ValueError("rows and cols must be non-negative")
-
-    if cols == 0:
-        logger.warning("Zero columns detected")
+        if s.status == "ok" and not isinstance(s.value, expected_type):
+            raise TypeError(f"{name} must be {expected_type}")
 
 
-# --------------------------- Signals ---------------------------
+# ------------------ LOGIC ------------------
 
+def low_sample_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    n = get_value(signal_map, "dataset_size")
+    d = get_value(signal_map, "feature_count")
 
-def low_sample_risk(signals: Dict[str, Structure]) -> TestResult:
-    n = signals["rows"]
-    d = signals["cols"]
-
-    if n is None or d is None:
+    if d == 0:
         return TestResult(
             dimension=DIMENSION,
             name="low_sample_risk",
             label="ERROR",
-            reason="rows or counts are 0",
-            risk=1.0,
-            metrics={"status" : "undefined"}
+            reason="No features",
+            risk=1.0
         )
 
     ratio = n / d
-    risk = np.exp(-ratio / 5)
-    
+    risk = float(np.exp(-ratio / 5))
+
     if risk < 0.2:
         label = "SAFE"
     elif risk < 0.4:
         label = "WARNING"
     else:
         label = "CRITICAL"
-        
-    result = TestResult(
+
+    return TestResult(
         dimension=DIMENSION,
         name="low_sample_risk",
         label=label,
-        reason="None",
-        risk=risk,
-        metrics=None
+        reason=f"n/d ratio = {ratio:.3f}",
+        risk=risk
     )
 
-    return result
 
+def sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    n = get_value(signal_map, "dataset_size")
 
-def sample_size_risk(signals: Dict[str, Structure]) -> TestResult:
-    n = signals["rows"]
-    risk = np.exp(-n / 300)
+    risk = float(np.exp(-n / 300))
 
     if risk < 0.2:
         label = "SAFE"
@@ -125,88 +118,63 @@ def sample_size_risk(signals: Dict[str, Structure]) -> TestResult:
         label = "WARNING"
     else:
         label = "CRITICAL"
-        
-    result = TestResult(
+
+    return TestResult(
         dimension=DIMENSION,
         name="sample_size_risk",
         label=label,
-        reason="None",
-        risk=risk,
-        metrics=None
+        reason=f"n = {n}",
+        risk=risk
     )
+
 
 LOGIC_REGISTRY = [
     low_sample_risk,
     sample_size_risk
 ]
 
-# --------------------------- Aggregate ---------------------------
 
-def aggregate_sample_adequacy(signals: List[TestResult]) -> TestResult:
-    try:
-        status = "PROCEED"
-        
-        for res in results:
-            if res.label == "CRITICAL":
-                status = "STOP"
-                break
-            elif res.label == "WARNING" and status != "STOP":
-                status = "REVIEW"
-        
-        result = OverallResult(
-            dimension=DIMENSION,
-            status=status,
-            reason="None"
-        )
-        
-    except Exception as e:
-        result = OverallResult(
-            dimension=DIMENSION,
-            status="ERROR",
-            reason="Some internal problem occured in calculating overall result"
-        )
+# ------------------ AGGREGATION ------------------
 
-    return result
+def aggregate(results: List[TestResult]) -> OverallResult:
+    status = "PROCEED"
+
+    for r in results:
+        if r.label == "CRITICAL":
+            return OverallResult(DIMENSION, "STOP", "Critical issue")
+        elif r.label == "WARNING":
+            status = "REVIEW"
+
+    return OverallResult(DIMENSION, status, "Aggregated result")
 
 
-# --------------------------- Orchestrator ---------------------------
+# ------------------ ORCHESTRATOR ------------------
 
-
-def run_sample_adequacy(signals: List[Structure]) -> tuple[List[TestResult], OverallResult]:
-    
-        # Step 1: build map
+def run_sample_adequacy_logic(signals: List[Structure]):
 
     signal_map = build_signal_map(signals)
 
-    # Step 2: validate contract
-    validate_signals_contract(signals)
+    validate_signals_contract(signal_map)
 
-    results: List[TestResult] = []
-    
-    for logic_fn in LOGIC_REGISTRY:
-        try: 
-            result = logic_fn(signal_map)
-            results.append(result)
-            
-            logger.debug(f"{logic_fn.__name__} success")
+    results = []
 
+    for fn in LOGIC_REGISTRY:
+        try:
+            results.append(fn(signal_map))
         except Exception as e:
-            logger.error("Signal failed", extra={
-                "signal": logic_fn.__name__,
-                "error": str(e)
-            })
-            
             results.append(
                 TestResult(
                     dimension=DIMENSION,
-                    name=logic_fn.__name__,
+                    name=fn.__name__,
                     label="ERROR",
                     reason=str(e),
-                    risk=1.0,
-                    metrics={"error": str(e)}
+                    risk=1.0
                 )
             )
 
+    overall = aggregate(results)
+
+    return results, overall
 
 if __name__ == "__main__":
-    run_sample_adequacy()
+    run_sample_adequacy_logic()
