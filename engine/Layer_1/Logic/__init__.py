@@ -18,7 +18,7 @@ import logging
 
 from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity
 from engine.Layer_1.Logic.target_sanity_logic import run_target_viability
-from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy
+from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy_logic as run_sample_adequacy
 from engine.Layer_1.primary_issues import generate_primary_issues
 
 logger = logging.getLogger(__name__)

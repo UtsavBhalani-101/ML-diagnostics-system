@@ -54,11 +54,18 @@ def get_value(signal_map, name):
     return s.value
 
 
-def validate_contract(signal_map):
-    for name, t in REQUIRED_SIGNALS.items():
+def validate_signals_contract(signal_map: Dict[str, Signal_Structure]):
+    for name, expected_type in REQUIRED_SIGNALS.items():
         s = signal_map[name]
-        if s.status == "ok" and not isinstance(s.value, t):
+        
+        if s is None:
+            raise ValueError(f"Missing signal: {name}")
+        
+        if s.status == "ok" and not isinstance(s.value, expected_type):
             raise TypeError(f"{name} invalid type")
+        
+        if s.status != "ok":
+            raise ValueError(f"{name} is not ok: {s.status}")
 
 
 # ------------------ LOGIC ------------------

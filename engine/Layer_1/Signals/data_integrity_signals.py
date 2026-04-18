@@ -36,8 +36,15 @@ def enforce(signal: Signal_Structure):
 # ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
-    if df is None or df.shape[0] == 0:
+    if (df is None) or (df.size == 0):
         return {"status": "fail", "reason": "Empty dataframe"}
+    
+    if df.shape[0] == 0:
+        return {"status" : "fail", "reason" : "No rows"}
+    
+    if df.shape[1] == 0:
+        return {"status" : "fail", "reason" : "No columns"}
+         
 
     return {"status": "pass"}
 
@@ -61,11 +68,6 @@ def dataset_shape(df: pd.DataFrame) -> Signal_Structure:
 def global_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
     total = df.shape[0] * df.shape[1]
 
-    if total == 0:
-        signal = Signal_Structure(DIMENSION, "global_missing_ratio", None, "no_value")
-        enforce(signal)
-        return signal
-
     ratio = float(df.isna().sum().sum() / total)
 
     signal = Signal_Structure(
@@ -80,10 +82,6 @@ def global_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
 
 
 def column_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
-    if df.shape[1] == 0:
-        signal = Signal_Structure(DIMENSION, "column_missing_ratio", None, "no_value")
-        enforce(signal)
-        return signal
 
     ratios = df.isna().mean().to_dict()
     worst = max(ratios.values())
@@ -100,10 +98,6 @@ def column_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
 
 
 def duplicated_ratio(df: pd.DataFrame) -> Signal_Structure:
-    if len(df) == 0:
-        signal = Signal_Structure(DIMENSION, "duplicated_ratio", None, "error")
-        enforce(signal)
-        return signal
 
     df_copy = df.fillna("__MISSING__")
     ratio = float(df_copy.duplicated().mean())
@@ -120,10 +114,6 @@ def duplicated_ratio(df: pd.DataFrame) -> Signal_Structure:
 
 
 def constant_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
-    if df.shape[1] == 0:
-        signal = Signal_Structure(DIMENSION, "constant_columns_ratio", None, "no_value")
-        enforce(signal)
-        return signal
 
     const_cols = df.columns[df.nunique(dropna=True) <= 1]
     ratio = float(len(const_cols) / df.shape[1])
@@ -164,10 +154,6 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
 
 
 def mixed_type_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
-    if df.shape[1] == 0:
-        signal = Signal_Structure(DIMENSION, "mixed_type_columns_ratio", None, "no_value")
-        enforce(signal)
-        return signal
 
     ignore = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
     obj_cols = df.select_dtypes(include="object")

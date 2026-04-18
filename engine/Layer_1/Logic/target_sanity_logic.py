@@ -93,6 +93,9 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
         if s.status == "ok":
             if not isinstance(s.value, expected_type):
                 raise TypeError(f"{name} must be {expected_type}")
+            
+        if s.status != "ok":
+            raise ValueError(f"{name} is not ok: {s.status}")
 
 
 # ------------------ LOGIC FUNCTIONS ------------------
@@ -118,15 +121,6 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def class_imbalance_risk(signal_map: Dict[str, Structure]) -> TestResult:
     imbalance_score = get_optional(signal_map, "class_imbalance_score")
-
-    if imbalance_score is None:
-        return TestResult(
-            dimension=DIMENSION,
-            name="class_imbalance_risk",
-            label="ERROR",
-            reason="Imbalance score unavailable",
-            risk=1.0
-        )
 
     if imbalance_score > 0.95:
         label = "CRITICAL"
@@ -186,18 +180,6 @@ def variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def evaluate_task_type(signal_map: Dict[str, Structure]) -> TestResult:
     unique_count = get_value(signal_map, "target_unique_count")
-    dataset = get_value(signal_map, "dataset_shape")
-
-    total = dataset["rows"]
-
-    if total == 0:
-        return TestResult(
-            dimension=DIMENSION,
-            name="task_type_inference",
-            label="ERROR",
-            reason="No data",
-            risk=1.0
-        )
 
     unique_ratio = unique_count / total
 
@@ -298,12 +280,12 @@ if __name__ == "__main__":
 
     signal_mapped = build_signal_map(mock_Signals)
     
-    # validate_signals_contract(signal_mapped)
+    validate_signals_contract(signal_mapped)
         
-    # result, overall = run_target_viability(signal_mapped)
+    result, overall = run_target_viability(signal_mapped)
     
-    # print(result)
-    # print(overall)
+    print(result)
+    print(overall)
     
-    print(type(mock_Signals))
+    # print((mock_Signals))
     

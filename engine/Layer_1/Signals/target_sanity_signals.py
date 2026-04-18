@@ -58,11 +58,14 @@ def is_mixed_type(y: pd.Series) -> bool:
 
 def validate_target(y: pd.Series) -> Dict:
 
+    if len(y) == 0:
+        return {"status": "fail", "reason": "Target is empty"}    
+        
     if y.isna().all():
-        return {"status": "fail", "reason": "Target is entirely missing"}
+        return {"status": "fail", "reason": "Target is entirely filled with missing"}
 
     if is_mixed_type(y):
-        return {"status": "fail", "reason": "Target column has mixed data types"}
+        return {"status": "fail", "reason": "Target column has mixed data types"}    
 
     return {"status": "pass", "y": y}
 
@@ -86,7 +89,7 @@ def target_missing_ratio(y: pd.Series) -> Structure:
 
 def target_variance(y: pd.Series) -> Structure:
     y_numeric = pd.to_numeric(y, errors="coerce").dropna()
-
+    
     if len(y_numeric) == 0:
         signal = Structure(
             dimension=DIMENSION,
@@ -129,16 +132,6 @@ def target_unique_count(y: pd.Series) -> Structure:
 
 
 def class_imbalance_score(y: pd.Series) -> Structure:
-    if len(y) == 0:
-        signal = Structure(
-            dimension=DIMENSION,
-            name="class_imbalance_score",
-            value=None,
-            status="error",
-            meta={"n_samples": 0}
-        )
-        enforce(signal)
-        return signal
 
     score = float(y.value_counts(normalize=True).iloc[0])
 
@@ -179,7 +172,7 @@ SIGNALS_REGISTRY = [
 
 REQUIRED_SIGNALS = {
     "target_missing_ratio": float,
-    "target_variance": dict,
+    "target_variance": (dict, type(None)),
     "target_unique_count": int,
     "class_imbalance_score": float,
     "dataset_shape": dict,

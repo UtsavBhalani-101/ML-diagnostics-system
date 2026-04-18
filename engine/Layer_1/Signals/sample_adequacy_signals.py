@@ -38,6 +38,10 @@ def enforce(signal: Structure):
 def validate_data(df: pd.DataFrame):
     if df is None or df.shape[0] == 0:
         return {"status": "fail", "reason": "Empty dataset"}
+    
+    if df.shape[1] == 0:
+        return {"status" : "fail", "reason" : "No columns"}
+        
 
     return {"status": "pass"}
 
@@ -75,17 +79,6 @@ def feature_count(df: pd.DataFrame) -> Structure:
 def n_to_d_ratio(df: pd.DataFrame) -> Structure:
     n = df.shape[0]
     d = df.shape[1]
-
-    if d == 0:
-        signal = Structure(
-            dimension=DIMENSION,
-            name="n_to_d_ratio",
-            value=None,
-            status="no_value",
-            meta={"n_rows": n, "n_features": d}
-        )
-        enforce(signal)
-        return signal
 
     ratio = float(n / d)
 
@@ -152,4 +145,6 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
     return results
 
 if __name__ == "__main__":
-    run_sample_adequacy()
+        
+    results = run_sample_adequacy(df)
+    print(results)

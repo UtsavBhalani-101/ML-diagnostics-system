@@ -10,6 +10,11 @@ ASSUMPTIONS = [
     "Data is IID (no strong temporal dependence)",
 ]
 
+import sys
+import os
+
+# Ensure the root directory is on the path so 'engine' can be imported when running standalone
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 import numpy as np
 import logging
@@ -84,24 +89,23 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 
         if s.status == "ok" and not isinstance(s.value, expected_type):
             raise TypeError(f"{name} must be {expected_type}")
+        
+        if s.status != "ok":
+            raise ValueError(f"{name} is not ok: {s.status}")
+        
+        n = signal_map["dataset_size"].value
+        d = signal_map["feature_count"].value
+        ratio = signal_map["n_to_d_ratio"].value
+
+        if abs(ratio - n/d) > 1e-9:
+            raise ValueError("n_to_d_ratio inconsistent with dataset_size and feature_count")
 
 
 # ------------------ LOGIC ------------------
 
 def n_to_d_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    n = get_value(signal_map, "dataset_size")
-    d = get_value(signal_map, "feature_count")
 
-    if d == 0:
-        return TestResult(
-            DIMENSION,
-            "n_to_d_risk",
-            "ERROR",
-            "No features present",
-            1.0
-        )
-
-    ratio = n / d
+    ratio = get_value(signal_map, "n_to_d_ratio")
 
     # Thresholds (interpretable)
     if ratio < 2:
@@ -159,16 +163,7 @@ def combined_sample_adequacy(signal_map: Dict[str, Structure]) -> TestResult:
     n = get_value(signal_map, "dataset_size")
     d = get_value(signal_map, "feature_count")
 
-    if d == 0:
-        return TestResult(
-            DIMENSION,
-            "combined_sample_adequacy",
-            "ERROR",
-            "No features",
-            1.0
-        )
-
-    ratio = n / d
+    ratio = get_value(signal_map, "n_to_d_ratio")
 
     # Combined logic (more realistic)
     if ratio < 2:
@@ -221,6 +216,8 @@ def aggregate(results: List[TestResult]) -> OverallResult:
     status = "PROCEED"
 
     for r in results:
+        if r.label == "ERROR":
+            return OverallResult(DIMENSION, "STOP", "Error occured when calculating")
         if r.label == "CRITICAL":
             return OverallResult(DIMENSION, "STOP", "Critical sample adequacy issue")
         elif r.label == "WARNING":
@@ -259,6 +256,8 @@ def run_sample_adequacy_logic(signals: List[Structure]):
 
 
 if __name__ == "__main__":
-    run_sample_adequacy_logic()
+    result = run_sample_adequacy_logic([Structure(dimension='sample_adequacy', name='dataset_size', value=2, status='no_value', meta={'n_rows': 2}), Structure(dimension='sample_adequacy', name='feature_count', value=5, status='ok', meta={'n_features': 5}), Structure(dimension='sample_adequacy', name='n_to_d_ratio', value=0.4, status='ok', meta={'n_rows': 2, 'n_features': 5})])
+    
+    print(result)
     
     
