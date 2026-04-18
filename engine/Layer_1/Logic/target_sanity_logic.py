@@ -120,7 +120,7 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 
 def class_imbalance_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    imbalance_score = get_optional(signal_map, "class_imbalance_score")
+    imbalance_score = get_value(signal_map, "class_imbalance_score")
 
     if imbalance_score > 0.95:
         label = "CRITICAL"
@@ -180,6 +180,8 @@ def variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def evaluate_task_type(signal_map: Dict[str, Structure]) -> TestResult:
     unique_count = get_value(signal_map, "target_unique_count")
+    shape = get_value(signal_map, "dataset_shape")
+    total = shape["rows"]
 
     unique_ratio = unique_count / total
 
@@ -271,21 +273,17 @@ def run_target_viability(signals: List[Structure]):
     return results, overall
 
 if __name__ == "__main__":
-    
-    mock_Signals = [Structure(dimension='target_viability', name='target_missing_ratio', value=0.08333333333333333, status='ok', meta={'n_samples': 12}),
+
+    mock_signals = [
+        Structure(dimension='target_viability', name='target_missing_ratio', value=0.08333333333333333, status='ok', meta={'n_samples': 12}),
         Structure(dimension='target_viability', name='target_variance', value={'variance': 0.24000000000000005, 'target_range': 1.0}, status='ok', meta={'valid_numeric_samples': 10}),
         Structure(dimension='target_viability', name='target_unique_count', value=3, status='ok', meta={'n_samples': 12}),
         Structure(dimension='target_viability', name='class_imbalance_score', value=0.5454545454545454, status='ok', meta={'n_samples': 12}),
-        Structure(dimension='target_viability', name='dataset_shape', value={'rows': 12, 'cols': 1}, status='ok', meta={'n_samples': 12})]
+        Structure(dimension='target_viability', name='dataset_shape', value={'rows': 12, 'cols': 1}, status='ok', meta={'n_samples': 12}),
+    ]
 
-    signal_mapped = build_signal_map(mock_Signals)
-    
-    validate_signals_contract(signal_mapped)
-        
-    result, overall = run_target_viability(signal_mapped)
-    
-    print(result)
+    results, overall = run_target_viability(mock_signals)
+
+    for r in results:
+        print(r)
     print(overall)
-    
-    # print((mock_Signals))
-    

@@ -87,18 +87,19 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
         if s is None:
             raise ValueError(f"Missing signal: {name}")
 
-        if s.status == "ok" and not isinstance(s.value, expected_type):
-            raise TypeError(f"{name} must be {expected_type}")
-        
         if s.status != "ok":
             raise ValueError(f"{name} is not ok: {s.status}")
         
-        n = signal_map["dataset_size"].value
-        d = signal_map["feature_count"].value
-        ratio = signal_map["n_to_d_ratio"].value
+        if s.status == "ok" and not isinstance(s.value, expected_type):
+            raise TypeError(f"{name} must be {expected_type}")
+        
+        
+    n = signal_map["dataset_size"].value
+    d = signal_map["feature_count"].value
+    ratio = signal_map["n_to_d_ratio"].value
 
-        if abs(ratio - n/d) > 1e-9:
-            raise ValueError("n_to_d_ratio inconsistent with dataset_size and feature_count")
+    if abs(ratio - n/d) > 1e-9:
+        raise ValueError("n_to_d_ratio inconsistent with dataset_size and feature_count")
 
 
 # ------------------ LOGIC ------------------
@@ -106,6 +107,8 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 def n_to_d_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
     ratio = get_value(signal_map, "n_to_d_ratio")
+    n = get_value(signal_map, "dataset_size")
+    d = get_value(signal_map, "feature_count")
 
     # Thresholds (interpretable)
     if ratio < 2:
@@ -217,9 +220,9 @@ def aggregate(results: List[TestResult]) -> OverallResult:
 
     for r in results:
         if r.label == "ERROR":
-            return OverallResult(DIMENSION, "STOP", "Error occured when calculating")
+            return OverallResult(DIMENSION, "STOP", "Error label occured")
         if r.label == "CRITICAL":
-            return OverallResult(DIMENSION, "STOP", "Critical sample adequacy issue")
+            return OverallResult(DIMENSION, "STOP", f"{r.name} test is CRITICAL")
         elif r.label == "WARNING":
             status = "REVIEW"
 
@@ -256,8 +259,14 @@ def run_sample_adequacy_logic(signals: List[Structure]):
 
 
 if __name__ == "__main__":
-    result = run_sample_adequacy_logic([Structure(dimension='sample_adequacy', name='dataset_size', value=2, status='no_value', meta={'n_rows': 2}), Structure(dimension='sample_adequacy', name='feature_count', value=5, status='ok', meta={'n_features': 5}), Structure(dimension='sample_adequacy', name='n_to_d_ratio', value=0.4, status='ok', meta={'n_rows': 2, 'n_features': 5})])
-    
-    print(result)
-    
-    
+    mock_signals = [
+        Structure(dimension='sample_adequacy', name='dataset_size', value=10, status='ok', meta={'n_rows': 10}),
+        Structure(dimension='sample_adequacy', name='feature_count', value=5, status='ok', meta={'n_features': 5}),
+        Structure(dimension='sample_adequacy', name='n_to_d_ratio', value=2.0, status='ok', meta={'n_rows': 10, 'n_features': 5}),
+    ]
+
+    results, overall = run_sample_adequacy_logic(mock_signals)
+
+    for r in results:
+        print(r)
+    print(overall)

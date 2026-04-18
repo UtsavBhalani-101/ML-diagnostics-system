@@ -145,6 +145,16 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
     return results
 
 if __name__ == "__main__":
-        
+    import numpy as np
+
+    df = pd.DataFrame({
+        "age": [25, 30, np.nan, 35, 40, 25, 30, np.nan, 35, 40],
+        "salary": [50000, 60000, 70000, 80000, 90000, 50000, 60000, 70000, 80000, 90000],
+        "city": ["NY", "LA", "SF", "NY", "LA", "NY", "LA", "SF", "NY", "LA"],
+        "score": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+        "const": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    })
+
     results = run_sample_adequacy(df)
-    print(results)
+    for r in results:
+        print(r)
