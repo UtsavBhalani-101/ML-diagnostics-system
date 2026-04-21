@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import pandas as pd
 import logging
@@ -22,12 +23,39 @@ class Structure:
 
 DIMENSION = "data_integrity"
 
+# ------------------ HELPER ------------------
+
+
+HIDDEN_TOKENS = {"na","n/a","null","none","unknown","?","-",""," ","np.nan","nan"}
+
+def _normalize_hidden_missing(df: pd.DataFrame) -> pd.DataFrame:
+    df2 = df.copy()
+    obj_cols = df2.select_dtypes(include="object").columns
+    for c in obj_cols:
+        s = df2[c].astype(str).str.strip().str.lower()
+        df2[c] = s.replace(HIDDEN_TOKENS, np.nan)
+    return df2
+
 
 # ------------------ ENFORCEMENT ------------------
+
+def _contains_nan_or_inf(value) -> bool:
+    """Recursively check if value contains nan or inf anywhere."""
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return True
+    if isinstance(value, dict):
+        return any(_contains_nan_or_inf(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nan_or_inf(v) for v in value)
+    return False
+
 
 def enforce(signal: Structure):
     if signal.status == "ok" and signal.value is None:
         raise ValueError(f"{signal.name}: ok but value is None")
+
+    if signal.status == "ok" and _contains_nan_or_inf(signal.value):
+        raise ValueError(f"{signal.name}: ok but value contains nan or inf")
 
     if signal.status in ("no_value", "error") and signal.value is not None:
         raise ValueError(f"{signal.name}: invalid state mismatch")
@@ -36,7 +64,7 @@ def enforce(signal: Structure):
 # ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
-    if df is None:
+    if df is None or len(df) == 0 or df.size == 0:
         return {"status": "fail", "reason": "Empty dataframe"}
     
     if df.shape[0] == 0:
@@ -98,10 +126,11 @@ def column_missing_ratio(df: pd.DataFrame) -> Structure:
 
 
 def duplicated_ratio(df: pd.DataFrame) -> Structure:
-
-    df_copy = df.fillna("__MISSING__")
+    
+    df_norm = _normalize_hidden_missing(df)
+    df_copy = df_norm.fillna("__MISSING__")
     ratio = float(df_copy.duplicated().mean())
-
+    
     signal = Structure(
         DIMENSION,
         "duplicated_ratio",
@@ -114,8 +143,10 @@ def duplicated_ratio(df: pd.DataFrame) -> Structure:
 
 
 def constant_columns_ratio(df: pd.DataFrame) -> Structure:
+    
+    df_norm = _normalize_hidden_missing(df)
 
-    const_cols = df.columns[df.nunique(dropna=True) <= 1]
+    const_cols = df_norm.columns[df_norm.nunique(dropna=True) <= 1]
     ratio = float(len(const_cols) / df.shape[1])
 
     signal = Structure(
@@ -130,15 +161,23 @@ def constant_columns_ratio(df: pd.DataFrame) -> Structure:
 
 
 def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
-    tokens = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
     obj_cols = df.select_dtypes(include="object")
 
+    if len(obj_cols.columns) == 0:
+        return Structure(
+            DIMENSION,
+            "hidden_missing_ratio",
+            None,
+            "no_value",
+            {"reason": "no object columns"}
+        )       
+    
     worst = 0.0
     ratios = {}
 
     for col in obj_cols:
         series = df[col].astype(str).str.strip().str.lower()
-        r = float(series.isin(tokens).mean())
+        r = float(series.isin(HIDDEN_TOKENS).mean())
         ratios[col] = r
         worst = max(worst, r)
 
@@ -149,6 +188,7 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
         "ok",
         {"num_object_columns": len(obj_cols.columns)}
     )
+    
     enforce(signal)
     return signal
 
@@ -169,7 +209,7 @@ def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
         if coerced.notna().any() and coerced.isna().any():
             mixed.append(col)
 
-    ratio = len(mixed) / df.shape[1]
+    ratio = len(mixed) / len(obj_cols.columns)
 
     signal = Structure(
         DIMENSION,
@@ -201,7 +241,7 @@ REQUIRED_SIGNALS = {
     "column_missing_ratio": dict,
     "duplicated_ratio": float,
     "constant_columns_ratio": dict,
-    "hidden_missing_ratio": dict,
+    "hidden_missing_ratio": (dict, type(None)),
     "mixed_type_columns_ratio": dict,
 }
 
@@ -230,16 +270,22 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
     return results
 
 if __name__ == "__main__":
-    import numpy as np
 
     df = pd.DataFrame({
-        "age": [25, 30, np.nan, 35, 40, 25, 30, np.nan, 35, 40],
-        "salary": [50000, 60000, 70000, 80000, 90000, 50000, 60000, 70000, 80000, 90000],
+        # "age": [25, 30, np.nan, 35, 40, 25, 30, np.nan, 35, 40],
+        # "salary": [50000, 60000, 70000, 80000, 90000, 50000, 60000, 70000, 80000, 90000],
         "city": ["NY", "LA", "na", "NY", "unknown", "NY", "LA", "?", "NY", "LA"],
-        "score": ["10", "20", "abc", "30", "def", "10", "20", "abc", "30", "def"],
+        # "score": ["10", "20", "abc", "30", "def", "10", "20", "abc", "30", "def"],
         "constant_col": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        # "missing" : [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     })
+    
+    # df = pd.DataFrame([[]])
+    
+    # df = pd.DataFrame({"col1" : [], "col2" : []})
 
-    results = run_signal_extraction(df)
-    for r in results:
-        print(r)
+    # results = run_signal_extraction(df)
+    # for r in results:
+    #     print(r)
+    
+    print(duplicated_ratio(df))
