@@ -1,473 +1,218 @@
 "use client";
 
-import { useState } from "react";
 import clsx from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Shield, Database, Target, BarChart3 } from "lucide-react";
-import type { DimensionResult, PrimaryIssue } from "@/lib/api";
-import { RiskBar } from "./risk-bar";
-import { RiskBreakdownChart } from "./risk-breakdown-chart";
-import { SignalTable } from "./signal-table";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { AlertTriangle, CheckCircle2, CircleSlash, Database, Shield, Target } from "lucide-react";
+import type { ValidationCheck, ValidationSection, ValidationStatus } from "@/lib/layer1-validation";
 
 interface DimensionCardProps {
-    name: string;
-    dimension: DimensionResult;
-    defaultExpanded?: boolean;
+    section: ValidationSection;
     className?: string;
 }
 
-interface SignalPreviewItem {
+const STATUS_STYLES: Record<ValidationStatus, {
     label: string;
-    value: string;
-}
-
-const DIMENSION_META: Record<string, {
-    label: string;
-    description: string;
-    icon: typeof Shield;
+    row: string;
+    badge: string;
+    icon: typeof CheckCircle2;
 }> = {
-    data_integrity: {
-        label: "Data Integrity",
-        description: "Structural completeness and consistency of the raw data.",
-        icon: Shield,
+    PASS: {
+        label: "PASS",
+        row: "border-green-500/20 bg-green-500/5",
+        badge: "border-green-500 bg-green-500/10 text-green-300",
+        icon: CheckCircle2,
     },
-    target_viability: {
-        label: "Target Viability",
-        description: "Whether the target is usable for reliable supervised learning.",
-        icon: Target,
+    FAIL: {
+        label: "FAIL",
+        row: "border-red-500/35 bg-red-500/10",
+        badge: "border-red-500 bg-red-500/10 text-red-300",
+        icon: CircleSlash,
     },
-    sample_adequacy: {
-        label: "Sample Adequacy",
-        description: "Whether the dataset has enough sample support for its feature space.",
-        icon: BarChart3,
+    WARNING: {
+        label: "WARNING",
+        row: "border-yellow-500/35 bg-yellow-500/10",
+        badge: "border-yellow-500 bg-yellow-500/10 text-yellow-200",
+        icon: AlertTriangle,
     },
 };
 
-function getStatusStyles(status: string) {
-    const normalized = status.toUpperCase();
-    if (normalized === "CRITICAL") {
-        return {
-            bg: "bg-red-500/10",
-            border: "border-red-500/20",
-            borderHover: "hover:border-red-500/35",
-            text: "text-red-400",
-            dot: "bg-red-500",
-            badge: "bg-red-500/15 text-red-400 border-red-500/25",
-        };
-    }
-    if (normalized === "WARNING") {
-        return {
-            bg: "bg-amber-500/10",
-            border: "border-amber-500/20",
-            borderHover: "hover:border-amber-500/35",
-            text: "text-amber-400",
-            dot: "bg-amber-500",
-            badge: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-        };
-    }
-    return {
-        bg: "bg-emerald-500/10",
-        border: "border-emerald-500/20",
-        borderHover: "hover:border-emerald-500/35",
-        text: "text-emerald-400",
-        dot: "bg-emerald-500",
-        badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-    };
+const SECTION_ICONS = {
+    data_integrity: Shield,
+    target_viability: Target,
+    sample_adequacy: Database,
+};
+
+function countByStatus(checks: ValidationCheck[], status: ValidationStatus): number {
+    return checks.filter((check) => check.status === status).length;
 }
 
-function formatRiskName(key: string): string {
-    const labels: Record<string, string> = {
-        mixed_types: "Mixed Types",
-        hidden_missing: "Hidden Missing",
-        missing_values: "Missing Values",
-        constant_columns: "Constant Columns",
-        low_sample: "Low Sample Support",
-        sample_size: "Sample Size",
-        task_uncertainty: "Task Uncertainty",
-        target_mixed_type: "Mixed Target Types",
-        target_missing: "Missing Target Values",
-        target_variance: "Low Target Variability",
-        imbalance: "Class Imbalance",
-        variance: "Low Variability",
-        duplicates: "Duplicates",
-    };
+function StatusBadge({ status }: { status: ValidationStatus }) {
+    const styles = STATUS_STYLES[status];
+    const Icon = styles.icon;
 
-    return labels[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+    return (
+        <span
+            className={clsx(
+                "inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest",
+                styles.badge,
+            )}
+        >
+            <Icon className="size-3" />
+            {styles.label}
+        </span>
+    );
 }
 
-function formatMetricValue(value: unknown): string {
-    if (value === null || value === undefined) {
-        return "None";
-    }
-    if (typeof value === "number") {
-        if (Math.abs(value) <= 1 && !Number.isInteger(value)) {
-            return `${(value * 100).toFixed(1)}%`;
-        }
-        if (Number.isInteger(value)) {
-            return value.toLocaleString();
-        }
-        return value.toFixed(2);
-    }
-    if (typeof value === "boolean") {
-        return value ? "Yes" : "No";
-    }
-    if (Array.isArray(value)) {
-        if (value.length === 0) {
-            return "None";
-        }
-        return value.slice(0, 3).join(", ");
-    }
-    return String(value);
+function ImpactBadge({ impact }: { impact: ValidationCheck["impact"] }) {
+    const className = impact === "BLOCKER"
+        ? "border-red-500/60 text-red-300"
+        : impact === "DEGRADING"
+            ? "border-yellow-500/60 text-yellow-200"
+            : "border-green-500/50 text-green-300";
+
+    return (
+        <span className={clsx("inline-flex w-fit rounded-md border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest", className)}>
+            {impact}
+        </span>
+    );
 }
 
-function getTopNumericEntry(value: unknown): [string, number] | null {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return null;
-    }
+function MobileCheckCard({ check }: { check: ValidationCheck }) {
+    return (
+        <div className={clsx("rounded-lg border p-4", STATUS_STYLES[check.status].row)}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Test
+                    </p>
+                    <h4 className="mt-1 text-sm font-semibold text-foreground">
+                        {check.testName}
+                    </h4>
+                </div>
+                <StatusBadge status={check.status} />
+            </div>
 
-    let best: [string, number] | null = null;
-    for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
-        if (typeof entryValue !== "number") {
-            continue;
-        }
-        if (!best || entryValue > best[1]) {
-            best = [key, entryValue];
-        }
-    }
-
-    return best && best[1] > 0 ? best : null;
+            <div className="grid gap-3 font-mono text-xs">
+                <MobileField label="Observed" value={check.observed} />
+                <MobileField label="Threshold" value={check.threshold} />
+                <MobileField label="Rule" value={check.rule} />
+                <div>
+                    <p className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Impact
+                    </p>
+                    <ImpactBadge impact={check.impact} />
+                </div>
+                <MobileField label="Action" value={check.status === "WARNING" && check.optionalAction ? check.optionalAction : check.action} />
+            </div>
+        </div>
+    );
 }
 
-function buildSignalPreview(name: string, signals: Record<string, unknown>): SignalPreviewItem[] {
-    const preview: SignalPreviewItem[] = [];
-
-    if (name === "data_integrity") {
-        const mixedColumns = Array.isArray(signals.mixed_type_columns) ? signals.mixed_type_columns : [];
-        if (mixedColumns.length > 0) {
-            preview.push({
-                label: "Mixed-Type Columns",
-                value: mixedColumns.slice(0, 3).join(", "),
-            });
-        }
-
-        const highestMissing = getTopNumericEntry(signals.column_missing_ratio);
-        if (highestMissing) {
-            preview.push({
-                label: "Highest Missing Column",
-                value: `${highestMissing[0]} (${(highestMissing[1] * 100).toFixed(1)}%)`,
-            });
-        }
-
-        if (typeof signals.global_missing_ratio === "number" && signals.global_missing_ratio > 0) {
-            preview.push({
-                label: "Global Missing",
-                value: `${(signals.global_missing_ratio * 100).toFixed(1)}%`,
-            });
-        }
-
-        if (typeof signals.duplicate_ratio === "number" && signals.duplicate_ratio > 0) {
-            preview.push({
-                label: "Duplicate Rows",
-                value: `${(signals.duplicate_ratio * 100).toFixed(1)}%`,
-            });
-        }
-
-        if (typeof signals.constant_ratio === "number" && signals.constant_ratio > 0) {
-            preview.push({
-                label: "Constant Columns",
-                value: `${(signals.constant_ratio * 100).toFixed(1)}%`,
-            });
-        }
-    }
-
-    if (name === "target_viability") {
-        if (typeof signals.target_missing_ratio === "number") {
-            preview.push({
-                label: "Target Missing",
-                value: `${(signals.target_missing_ratio * 100).toFixed(1)}%`,
-            });
-        }
-
-        if (typeof signals.target_unique_count === "number") {
-            preview.push({
-                label: "Unique Target Values",
-                value: signals.target_unique_count.toLocaleString(),
-            });
-        }
-
-        if (typeof signals.task_confidence === "number") {
-            preview.push({
-                label: "Task Confidence",
-                value: `${(signals.task_confidence * 100).toFixed(0)}%`,
-            });
-        }
-
-        if (typeof signals.class_imbalance_score === "number" && signals.class_imbalance_score > 0) {
-            preview.push({
-                label: "Imbalance Score",
-                value: signals.class_imbalance_score.toFixed(2),
-            });
-        }
-    }
-
-    if (name === "sample_adequacy") {
-        if (typeof signals.sample_feature_ratio === "number") {
-            preview.push({
-                label: "Samples per Feature",
-                value: signals.sample_feature_ratio.toFixed(2),
-            });
-        }
-
-        if (typeof signals.rows === "number") {
-            preview.push({
-                label: "Rows",
-                value: signals.rows.toLocaleString(),
-            });
-        }
-
-        if (typeof signals.cols === "number") {
-            preview.push({
-                label: "Columns",
-                value: signals.cols.toLocaleString(),
-            });
-        }
-    }
-
-    if (preview.length > 0) {
-        return preview.slice(0, 3);
-    }
-
-    return Object.entries(signals)
-        .filter(([, value]) => typeof value !== "object")
-        .slice(0, 3)
-        .map(([label, value]) => ({
-            label: formatRiskName(label),
-            value: formatMetricValue(value),
-        }));
+function MobileField({ label, value }: { label: string; value: string }) {
+    return (
+        <div>
+            <p className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                {label}
+            </p>
+            <p className="text-foreground">{value}</p>
+        </div>
+    );
 }
 
-function getMaterialPrimaryIssues(
-    issues: PrimaryIssue[],
-    status: string,
-): PrimaryIssue[] {
-    if (status !== "SAFE") {
-        return issues.slice(0, 2);
-    }
-
-    return issues.filter((issue) => issue.risk >= 0.1).slice(0, 2);
-}
-
-export function DimensionCard({
-    name,
-    dimension,
-    defaultExpanded = false,
-    className,
-}: DimensionCardProps) {
-    const [expanded, setExpanded] = useState(defaultExpanded);
-    const meta = DIMENSION_META[name] ?? {
-        label: name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
-        description: "",
-        icon: Database,
-    };
-    const styles = getStatusStyles(dimension.status);
-    const Icon = meta.icon;
-    const materialIssues = getMaterialPrimaryIssues(dimension.primary_issues, dimension.status);
-    const previewSignals = buildSignalPreview(name, dimension.signals);
-    const hasSignalDetails = Object.keys(dimension.signals).length > 0;
-    const hasBreakdown =
-        [...Object.values(dimension.breakdown.dominant), ...Object.values(dimension.breakdown.additive)]
-            .some((value) => value > 0);
-
+function CheckRow({ check }: { check: ValidationCheck }) {
     return (
         <div
             className={clsx(
-                "rounded-xl border bg-card/60 backdrop-blur transition-all duration-300",
-                styles.border,
-                styles.borderHover,
-                expanded && styles.bg,
-                className,
+                "grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 rounded-lg border px-3 py-3 text-sm",
+                STATUS_STYLES[check.status].row,
             )}
         >
-            <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setExpanded(!expanded)}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setExpanded(!expanded);
-                    }
-                }}
-                className="flex w-full cursor-pointer items-center gap-4 p-5 text-left group md:p-6"
-            >
-                <div className={clsx("flex size-10 shrink-0 items-center justify-center rounded-lg", styles.bg)}>
-                    <Icon className={clsx("size-5", styles.text)} />
-                </div>
+            <div className="font-semibold text-foreground">{check.testName}</div>
+            <StatusBadge status={check.status} />
+            <div className="font-mono text-xs text-foreground">{check.observed}</div>
+            <div className="font-mono text-xs text-muted-foreground">{check.threshold}</div>
+            <div className="text-xs leading-relaxed text-foreground">{check.rule}</div>
+            <ImpactBadge impact={check.impact} />
+        </div>
+    );
+}
 
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2.5">
-                        <h3 className="truncate text-base font-semibold tracking-tight">
-                            {meta.label}
-                        </h3>
-                        <span
-                            className={clsx(
-                                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest",
-                                styles.badge,
-                            )}
-                        >
-                            <span className={clsx("size-1.5 rounded-full", styles.dot)} />
-                            {dimension.status.toUpperCase()}
-                        </span>
-                    </div>
-                    <div className="mt-2.5 max-w-48">
-                        <RiskBar risk={dimension.risk} height="h-1.5" showMarker={false} />
-                    </div>
-                </div>
+export function DimensionCard({ section, className }: DimensionCardProps) {
+    const SectionIcon = SECTION_ICONS[section.key] ?? Database;
+    const failCount = countByStatus(section.checks, "FAIL");
+    const warningCount = countByStatus(section.checks, "WARNING");
+    const passCount = countByStatus(section.checks, "PASS");
 
-                <Tooltip>
-                    <TooltipTrigger
-                        className={clsx(
-                            "shrink-0 text-2xl font-bold tabular-nums tracking-tight md:text-3xl",
-                            styles.text,
-                        )}
-                    >
-                        {dimension.risk.toFixed(2)}
-                    </TooltipTrigger>
-                    <TooltipContent side="left" className="max-w-48 text-xs">
-                        <p className="font-medium">Risk Score</p>
-                        <p className="mt-0.5 text-muted-foreground">
-                            Higher values indicate more structural risk in this dimension.
+    return (
+        <section className={clsx("rounded-lg border border-white/[0.08] bg-card/60 p-5 backdrop-blur md:p-6", className)}>
+            <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="flex gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03]">
+                        <SectionIcon className="size-5 text-primary" />
+                    </div>
+                    <div>
+                        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                            Validation Checks
                         </p>
-                    </TooltipContent>
-                </Tooltip>
+                        <h3 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                            {section.label}
+                        </h3>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                            {section.description}
+                        </p>
+                    </div>
+                </div>
 
-                <ChevronDown
-                    className={clsx(
-                        "size-5 shrink-0 text-muted-foreground transition-transform duration-300",
-                        expanded && "rotate-180",
-                    )}
-                />
+                <div className="grid grid-cols-3 gap-2 font-mono text-xs md:min-w-64">
+                    <Counter label="FAIL" value={failCount} tone="fail" />
+                    <Counter label="WARN" value={warningCount} tone="warning" />
+                    <Counter label="PASS" value={passCount} tone="pass" />
+                </div>
             </div>
 
-            <AnimatePresence initial={false}>
-                {expanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                        className="overflow-hidden"
-                    >
-                        <div className="space-y-6 px-5 pb-6 md:px-6">
-                            <div className="border-t border-white/[0.06]" />
+            <div className="hidden md:block">
+                <div className="mb-2 grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <span>Test</span>
+                    <span>Status</span>
+                    <span>Observed</span>
+                    <span>Threshold</span>
+                    <span>Decision Rule</span>
+                    <span>Impact</span>
+                </div>
+                <div className="space-y-2">
+                    {section.checks.map((check) => (
+                        <CheckRow key={check.id} check={check} />
+                    ))}
+                </div>
+            </div>
 
-                            {meta.description && (
-                                <p className="text-sm text-muted-foreground/80">
-                                    {meta.description}
-                                </p>
-                            )}
+            <div className="space-y-3 md:hidden">
+                {section.checks.map((check) => (
+                    <MobileCheckCard key={check.id} check={check} />
+                ))}
+            </div>
+        </section>
+    );
+}
 
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-                                    <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                        Primary Issue
-                                    </p>
-                                    <div className="mt-3 space-y-2">
-                                        {materialIssues.length > 0 ? (
-                                            materialIssues.map((issue) => (
-                                                <div key={`issue-${issue.name}`} className="flex items-center justify-between gap-3">
-                                                    <span className="text-sm font-medium text-foreground">
-                                                        {formatRiskName(issue.name)}
-                                                    </span>
-                                                    <span className="text-xs font-mono text-muted-foreground">
-                                                        {issue.risk.toFixed(2)}
-                                                    </span>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-sm text-foreground">No material structural issue</p>
-                                        )}
-                                    </div>
-                                </div>
+function Counter({
+    label,
+    value,
+    tone,
+}: {
+    label: string;
+    value: number;
+    tone: "fail" | "warning" | "pass";
+}) {
+    const className = tone === "fail"
+        ? "border-red-500/35 bg-red-500/10 text-red-300"
+        : tone === "warning"
+            ? "border-yellow-500/35 bg-yellow-500/10 text-yellow-200"
+            : "border-green-500/25 bg-green-500/10 text-green-300";
 
-                                <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-                                    <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                        Quick Action
-                                    </p>
-                                    <div className="mt-3 space-y-2">
-                                        {materialIssues.length > 0 ? (
-                                            materialIssues.map((issue) => (
-                                                <p key={`action-${issue.name}`} className="text-sm text-foreground">
-                                                    {issue.action}
-                                                </p>
-                                            ))
-                                        ) : (
-                                            <p className="text-sm text-foreground">No immediate action</p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {dimension.status === "SAFE" && dimension.interpretation && (
-                                <div className="rounded-xl border border-emerald-600/25 bg-emerald-500/12 px-4 py-3 text-sm leading-relaxed text-emerald-900 dark:border-emerald-500/15 dark:bg-emerald-500/8 dark:text-emerald-50/90">
-                                    {dimension.interpretation}
-                                </div>
-                            )}
-
-                            {hasBreakdown && (
-                                <div>
-                                    <h4 className="mb-4 text-xs font-mono font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                        Risk Contribution
-                                    </h4>
-                                    <RiskBreakdownChart
-                                        dominant={dimension.breakdown.dominant}
-                                        additive={dimension.breakdown.additive}
-                                    />
-                                </div>
-                            )}
-
-                            {previewSignals.length > 0 && (
-                                <div>
-                                    <h4 className="mb-3 text-xs font-mono font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                        Most Relevant Signals
-                                    </h4>
-                                    <div className="space-y-2">
-                                        {previewSignals.map((signal) => (
-                                            <div
-                                                key={`${signal.label}-${signal.value}`}
-                                                className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5"
-                                            >
-                                                <span className="text-sm text-muted-foreground">
-                                                    {signal.label}
-                                                </span>
-                                                <span className="text-sm font-mono text-foreground">
-                                                    {signal.value}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {hasSignalDetails && (
-                                <details className="rounded-xl border border-white/8 bg-white/[0.02]">
-                                    <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
-                                        View All Signals
-                                    </summary>
-                                    <div className="border-t border-white/[0.06] p-3">
-                                        <SignalTable signals={dimension.signals} />
-                                    </div>
-                                </details>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+    return (
+        <div className={clsx("rounded-md border px-3 py-2 text-center", className)}>
+            <div className="text-lg font-bold tabular-nums">{value}</div>
+            <div className="mt-0.5 text-[9px] uppercase tracking-widest">{label}</div>
         </div>
     );
 }

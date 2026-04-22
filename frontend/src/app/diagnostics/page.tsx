@@ -85,8 +85,8 @@ export default function DiagnosticsPage() {
                         Run Diagnostics
                     </h1>
                     <p className="mx-auto max-w-lg font-mono text-muted-foreground">
-                        Upload your dataset, confirm the target column, and run the live
-                        Layer 1 pipeline against the backend.
+                        Upload your dataset, confirm the target column, and run the
+                        Layer 1 validation gate against the backend.
                     </p>
                 </div>
 
@@ -106,21 +106,21 @@ export default function DiagnosticsPage() {
                             <StatusBadge
                                 key="target-selected"
                                 status="success"
-                                message={`Target: ${selectedTarget} - Ready to Analyze`}
+                                message={`Target: ${selectedTarget} - Ready to Validate`}
                             />
                         )}
                         {state === "running" && (
                             <StatusBadge
                                 key="running"
                                 status="loading"
-                                message="Running Layer 1 Analysis..."
+                                message="Running Layer 1 Validation..."
                             />
                         )}
                         {state === "complete" && (
                             <StatusBadge
                                 key="complete"
                                 status="success"
-                                message="Analysis Complete - Report Ready"
+                                message="Validation Complete - Gate Ready"
                             />
                         )}
                         {state === "error" && (validationError || analysisError) && (
@@ -148,12 +148,12 @@ export default function DiagnosticsPage() {
                             {state === "running" ? (
                                 <>
                                     <LoaderCircle className="size-5 animate-spin" />
-                                    Running Analysis...
+                                    Running Validation...
                                 </>
                             ) : (
                                 <>
                                     <Play className="size-5" />
-                                    Run Layer 1 Analysis
+                                    Run Layer 1 Validation
                                 </>
                             )}
                         </Button>
@@ -165,7 +165,7 @@ export default function DiagnosticsPage() {
                         <Link href={"/diagnostics/layer1-report" as Route}>
                             <Button size="lg" className="h-12 gap-2 px-8">
                                 <ArrowRight className="size-5" />
-                                View Layer 1 Report
+                                View Validation Gate
                             </Button>
                         </Link>
                     </div>
@@ -173,7 +173,7 @@ export default function DiagnosticsPage() {
 
                 <div className="mt-8 flex flex-row gap-6 opacity-50">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Layer 1: Structural Risk
+                        Layer 1: Validation Gate
                     </span>
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         Pipeline: {state === "idle" ? "Ready" : state.replace("-", " ")}
