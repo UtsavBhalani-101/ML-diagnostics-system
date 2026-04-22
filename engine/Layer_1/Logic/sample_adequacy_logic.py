@@ -1,15 +1,3 @@
-
-# ------------------ ASSUMPTIONS ------------------
-
-# * do I have enough data to even learn ?
-
-ASSUMPTIONS = [
-    "Model is classical tabular ML (not deep learning)", 
-    "Features are moderately useful (not garbage, not perfect)",
-    "Noise level is moderate",
-    "Data is IID (no strong temporal dependence)",
-]
-
 import sys
 import os
 
@@ -22,6 +10,18 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional
 
 from engine.Layer_1.Signals.sample_adequacy_signals import Structure, REQUIRED_SIGNALS
+
+# ------------------ ASSUMPTIONS ------------------
+
+# * do I have enough data to even learn ?
+
+ASSUMPTIONS = [
+    "Model is classical tabular ML (not deep learning)", 
+    "Features are moderately useful (not garbage, not perfect)",
+    "Noise level is moderate",
+    "Data is IID (no strong temporal dependence)",
+]
+
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -87,147 +87,189 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
         if s is None:
             raise ValueError(f"Missing signal: {name}")
 
+        if s.status == "ok":
+            if not isinstance(s.value, expected_type):
+                raise TypeError(f"{name} must be {expected_type}")
+
         if s.status != "ok":
             raise ValueError(f"{name} is not ok: {s.status}")
-        
-        if s.status == "ok" and not isinstance(s.value, expected_type):
-            raise TypeError(f"{name} must be {expected_type}")
-        
-        
-    n = signal_map["dataset_size"].value
-    d = signal_map["feature_count"].value
-    ratio = signal_map["n_to_d_ratio"].value
-
-    if abs(ratio - n/d) > 1e-9:
-        raise ValueError("n_to_d_ratio inconsistent with dataset_size and feature_count")
 
 
-# ------------------ LOGIC ------------------
+# ------------------ LOGIC FUNCTIONS ------------------
 
-def n_to_d_risk(signal_map: Dict[str, Structure]) -> TestResult:
-
-    ratio = get_value(signal_map, "n_to_d_ratio")
-    n = get_value(signal_map, "dataset_size")
-    d = get_value(signal_map, "feature_count")
-
-    # Thresholds (interpretable)
-    if ratio < 2:
+def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    ratio = get_value(signal_map, "duplicated_ratio")
+    
+    if ratio >= 0.5:
         label = "CRITICAL"
-        risk = 1.0
-    elif ratio < 5:
+    elif ratio >= 0.2:
         label = "WARNING"
-        risk = 0.7
-    elif ratio < 10:
-        label = "OK"
-        risk = 0.4
-    elif ratio < 20:
-        label = "GOOD"
-        risk = 0.2
     else:
         label = "SAFE"
-        risk = 0.1
-
+        
     return TestResult(
-        DIMENSION,
-        "n_to_d_risk",
-        label,
-        f"n/d ratio = {ratio:.2f}",
-        risk,
-        metrics={"n": n, "d": d}
+        dimension=DIMENSION,
+        name="duplicated_risk",
+        label=label,
+        reason=f"Duplicated ratio = {ratio:.3f}",
+        risk=float(ratio),
+        metrics={"ratio": float(ratio)}
     )
 
-
-def sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    n = get_value(signal_map, "dataset_size")
-
-    if n < 100:
+def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    score = get_value(signal_map, "effective_sample_size")
+    risk = float(np.exp(-score))
+    
+    if risk > 0.8:
         label = "CRITICAL"
-        risk = 1.0
-    elif n < 500:
+    elif risk > 0.5:
         label = "WARNING"
-        risk = 0.7
-    elif n < 2000:
-        label = "OK"
-        risk = 0.4
     else:
         label = "SAFE"
-        risk = 0.1
-
+        
     return TestResult(
-        DIMENSION,
-        "sample_size_risk",
-        label,
-        f"n = {n}",
-        risk
+        dimension=DIMENSION,
+        name="effective_sample_size_risk",
+        label=label,
+        reason=f"NN distance = {score:.3f}",
+        risk=risk,
+        metrics={"nn_distance": float(score)}
     )
 
-
-def combined_sample_adequacy(signal_map: Dict[str, Structure]) -> TestResult:
-    n = get_value(signal_map, "dataset_size")
-    d = get_value(signal_map, "feature_count")
-
-    ratio = get_value(signal_map, "n_to_d_ratio")
-
-    # Combined logic (more realistic)
-    if ratio < 2:
+def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    score = get_value(signal_map, "sample_dependency_score")
+    risk = float(np.exp(-score))
+    
+    if risk > 0.8:
         label = "CRITICAL"
-        reason = "Severely underdetermined (n/d < 2)"
-        risk = 1.0
-
-    elif n < 200 and d > 20:
-        label = "CRITICAL"
-        reason = "Too few samples for feature space"
-        risk = 0.9
-
-    elif ratio < 5:
+    elif risk > 0.5:
         label = "WARNING"
-        reason = "Low samples per feature"
-        risk = 0.7
-
-    elif n < 500:
-        label = "WARNING"
-        reason = "Small dataset size"
-        risk = 0.6
-
     else:
         label = "SAFE"
-        reason = "Sufficient samples and ratio"
-        risk = 0.2
-
+        
     return TestResult(
-        DIMENSION,
-        "combined_sample_adequacy",
-        label,
-        reason,
-        risk,
-        metrics={"n": n, "d": d, "ratio": round(ratio, 2)}
+        dimension=DIMENSION,
+        name="sample_dependency_risk",
+        label=label,
+        reason=f"Dependency score = {score:.3f}",
+        risk=risk,
+        metrics={"step_distance": float(score)}
     )
 
+def label_noise_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    score = get_value(signal_map, "label_noise_proxy")
+    risk = float(score)
+    
+    if risk > 0.4:
+        label = "CRITICAL"
+    elif risk > 0.2:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+        
+    return TestResult(
+        dimension=DIMENSION,
+        name="label_noise_risk",
+        label=label,
+        reason=f"Label noise proxy = {score:.3f}",
+        risk=risk,
+        metrics={"noise_proxy": risk}
+    )
+
+def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    ratio = get_value(signal_map, "feature_variance_score")
+    risk = float(ratio)
+    
+    if risk >= 0.5:
+        label = "CRITICAL"
+    elif risk >= 0.2:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+        
+    return TestResult(
+        dimension=DIMENSION,
+        name="feature_variance_risk",
+        label=label,
+        reason=f"Low variance ratio = {ratio:.3f}",
+        risk=risk,
+        metrics={"low_variance_ratio": risk}
+    )
+
+def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    coverage = get_value(signal_map, "marginal_coverage")
+    risk = float(1.0 - coverage)
+    
+    if risk >= 0.6:
+        label = "CRITICAL"
+    elif risk >= 0.3:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+        
+    return TestResult(
+        dimension=DIMENSION,
+        name="marginal_coverage_risk",
+        label=label,
+        reason=f"Marginal coverage = {coverage:.3f}",
+        risk=risk,
+        metrics={"coverage": float(coverage)}
+    )
+
+def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    coverage = get_value(signal_map, "joint_coverage")
+    risk = float(1.0 - coverage)
+    
+    if risk >= 0.7:
+        label = "CRITICAL"
+    elif risk >= 0.4:
+        label = "WARNING"
+    else:
+        label = "SAFE"
+        
+    return TestResult(
+        dimension=DIMENSION,
+        name="joint_coverage_risk",
+        label=label,
+        reason=f"Joint coverage = {coverage:.3f}",
+        risk=risk,
+        metrics={"coverage": float(coverage)}
+    )
 
 # ------------------ REGISTRY ------------------
 
 LOGIC_REGISTRY = [
-    n_to_d_risk,
-    sample_size_risk,
-    combined_sample_adequacy
+    duplicated_risk,
+    effective_sample_size_risk,
+    sample_dependency_risk,
+    label_noise_risk,
+    feature_variance_risk,
+    marginal_coverage_risk,
+    joint_coverage_risk
 ]
-
 
 # ------------------ AGGREGATION ------------------
 
-def aggregate(results: List[TestResult]) -> OverallResult:
-    status = "PROCEED"
+def aggregate_risk(results: List[TestResult]) -> OverallResult:
+    risks = [r.risk for r in results if r.label != "ERROR"]
 
-    for r in results:
-        if r.label == "ERROR":
-            return OverallResult(DIMENSION, "STOP", "Error label occured")
-        if r.label == "CRITICAL":
-            return OverallResult(DIMENSION, "STOP", f"{r.name} test is CRITICAL")
-        elif r.label == "WARNING":
-            status = "REVIEW"
+    if not risks:
+        return OverallResult(DIMENSION, "REVIEW", "No valid signals")
 
-    return OverallResult(DIMENSION, status, "Sample adequacy acceptable")
+    total_risk = 1 - np.prod([1 - r for r in risks])
 
+    if total_risk >= 0.7:
+        status = "STOP"
+    elif total_risk >= 0.3:
+        status = "REVIEW"
+    else:
+        status = "PROCEED"
+
+    return OverallResult(
+        DIMENSION,
+        status,
+        f"Aggregated risk={total_risk:.3f}"
+    )
 
 # ------------------ ORCHESTRATOR ------------------
 
@@ -253,16 +295,20 @@ def run_sample_adequacy_logic(signals: List[Structure]):
                 )
             )
 
-    overall = aggregate(results)
+    overall = aggregate_risk(results)
 
     return results, overall
 
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension='sample_adequacy', name='dataset_size', value=10, status='ok', meta={'n_rows': 10}),
-        Structure(dimension='sample_adequacy', name='feature_count', value=5, status='ok', meta={'n_features': 5}),
-        Structure(dimension='sample_adequacy', name='n_to_d_ratio', value=2.0, status='ok', meta={'n_rows': 10, 'n_features': 5}),
+        Structure(dimension=DIMENSION, name='duplicated_ratio', value=0.1, status='ok'),
+        Structure(dimension=DIMENSION, name='effective_sample_size', value=1.5, status='ok'),
+        Structure(dimension=DIMENSION, name='sample_dependency_score', value=1.2, status='ok'),
+        Structure(dimension=DIMENSION, name='label_noise_proxy', value=0.1, status='ok'),
+        Structure(dimension=DIMENSION, name='feature_variance_score', value=0.1, status='ok'),
+        Structure(dimension=DIMENSION, name='marginal_coverage', value=0.9, status='ok'),
+        Structure(dimension=DIMENSION, name='joint_coverage', value=0.8, status='ok')
     ]
 
     results, overall = run_sample_adequacy_logic(mock_signals)
