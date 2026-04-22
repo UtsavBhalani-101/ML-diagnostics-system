@@ -47,6 +47,7 @@ class OverallResult:
     dimension: str
     status: str
     reason: str
+    risk: float
 
 
 # ------------------ SIGNAL ACCESS ------------------
@@ -90,9 +91,6 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
         if s.status == "ok":
             if not isinstance(s.value, expected_type):
                 raise TypeError(f"{name} must be {expected_type}")
-
-        if s.status != "ok":
-            raise ValueError(f"{name} is not ok: {s.status}")
 
 
 # ------------------ LOGIC FUNCTIONS ------------------
@@ -254,7 +252,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     risks = [r.risk for r in results if r.label != "ERROR"]
 
     if not risks:
-        return OverallResult(DIMENSION, "REVIEW", "No valid signals")
+        return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
 
     total_risk = 1 - np.prod([1 - r for r in risks])
 
@@ -268,12 +266,13 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     return OverallResult(
         DIMENSION,
         status,
-        f"Aggregated risk={total_risk:.3f}"
+        f"Aggregated risk={total_risk:.3f}",
+        total_risk
     )
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_sample_adequacy_logic(signals: List[Structure]):
+def run_sample_adequacy(signals: List[Structure]):
 
     signal_map = build_signal_map(signals)
 
@@ -311,7 +310,7 @@ if __name__ == "__main__":
         Structure(dimension=DIMENSION, name='joint_coverage', value=0.8, status='ok')
     ]
 
-    results, overall = run_sample_adequacy_logic(mock_signals)
+    results, overall = run_sample_adequacy(mock_signals)
 
     for r in results:
         print(r)

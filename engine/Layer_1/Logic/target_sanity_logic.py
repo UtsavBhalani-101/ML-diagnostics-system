@@ -49,6 +49,7 @@ class OverallResult:
     dimension: str
     status: str
     reason: str
+    risk: float
 
 
 # ------------------ SIGNAL ACCESS LAYER ------------------
@@ -97,9 +98,6 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
         if s.status == "ok":
             if not isinstance(s.value, expected_type):
                 raise TypeError(f"{name} must be {expected_type}")
-
-        if s.status != "ok":
-            raise ValueError(f"{name} is not ok: {s.status}")
 
 
 # ------------------ LOGIC FUNCTIONS ------------------
@@ -284,10 +282,10 @@ LOGIC_REGISTRY = [
 
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
 
-    risks = [r.risk for r in results if r.label == "ok"]
+    risks = [r.risk for r in results if r.label != "ERROR"]
 
     if not risks:
-        return OverallResult(DIMENSION, "REVIEW", "No valid signals")
+        return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
 
     total_risk = 1 - np.prod([1 - r for r in risks])
 
@@ -301,7 +299,8 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     return OverallResult(
         DIMENSION,
         status,
-        f"Aggregated risk={total_risk:.3f}"
+        f"Aggregated risk={total_risk:.3f}",
+        total_risk
     )
 
 # ------------------ ORCHESTRATOR ------------------

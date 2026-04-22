@@ -1,11 +1,8 @@
 from dataclasses import dataclass
-import sys
 import numpy as np
-import os
 import logging
 from typing import Dict, List, Optional
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from engine.Layer_1.Signals.data_integrity_signals import Structure, REQUIRED_SIGNALS
 
@@ -43,6 +40,7 @@ class OverallResult:
     dimension: str
     status: str
     reason: str
+    risk: float
 
 
 # ------------------ ACCESS ------------------
@@ -65,9 +63,6 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 
         if s is None:
             raise ValueError(f"Missing signal: {name}")
-
-        if s.status != "ok":
-            raise ValueError(f"{name} is not ok: {s.status}")
 
         if s.status == "ok" and not isinstance(s.value, expected_type):
             raise TypeError(f"{name} invalid type")
@@ -170,10 +165,10 @@ LOGIC_REGISTRY = [
 
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
 
-    risks = [r.risk for r in results if r.label == "ok"]
+    risks = [r.risk for r in results if r.label != "ERROR"]
 
     if not risks:
-        return OverallResult(DIMENSION, "REVIEW", "No valid signals")
+        return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
 
     total_risk = 1 - np.prod([1 - r for r in risks])
 
@@ -187,7 +182,8 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     return OverallResult(
         DIMENSION,
         status,
-        f"Aggregated risk={total_risk:.3f}"
+        f"Aggregated risk={total_risk:.3f}",
+        total_risk
     )
 
 def run_data_integrity(signals: List[Structure]):
@@ -207,64 +203,13 @@ def run_data_integrity(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(
-            dimension="data_integrity",
-            name="dataset_shape",
-            value={"rows": 10, "cols": 5},
-            status="ok",
-            meta=None,
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="global_missing_ratio",
-            value=0.04,
-            status="ok",
-            meta={"total_cells": 50},
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="column_missing_ratio",
-            value={
-                "per_column": {
-                    "age": 0.2,
-                    "salary": 0.0,
-                    "city": 0.0,
-                    "score": 0.0,
-                    "constant_col": 0.0,
-                },
-                "worst_ratio": 0.2,
-            },
-            status="ok",
-            meta={"num_columns": 5},
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="duplicated_ratio",
-            value=0.3,
-            status="ok",
-            meta={"num_rows": 10},
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="constant_columns_ratio",
-            value={"columns": ["constant_col"], "ratio": 0.2},
-            status="ok",
-            meta={"total_columns": 5},
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="hidden_missing_ratio",
-            value={"ratios": {"city": 0.3, "score": 0.0}, "worst_ratio": 0.3},
-            status="ok",
-            meta={"num_object_columns": 2},
-        ),
-        Structure(
-            dimension="data_integrity",
-            name="mixed_type_columns_ratio",
-            value={"columns": ["score"], "ratio": 0.2},
-            status="ok",
-            meta={"num_object_columns": 2},
-        ),
+        Structure(dimension='data_integrity', name='dataset_shape', value={'rows': 891, 'cols': 12}, status='ok', meta=None),
+        Structure(dimension='data_integrity', name='global_missing_ratio', value=0.08099513655069211, status='ok', meta={'total_cells': 10692}),
+        Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'PassengerId': 0.0, 'Survived': 0.0, 'Pclass': 0.0, 'Name': 0.0, 'Sex': 0.0, 'Age': 0.19865319865319866, 'SibSp': 0.0, 'Parch': 0.0, 'Ticket': 0.0, 'Fare': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_columns': 12}),
+        Structure(dimension='data_integrity', name='duplicated_ratio', value=0.0, status='ok', meta={'num_rows': 891}),
+        Structure(dimension='data_integrity', name='constant_columns_ratio', value={'columns': [], 'ratio': 0.0}, status='ok', meta={'total_columns': 12}),
+        Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'Name': 0.0, 'Sex': 0.0, 'Ticket': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_object_columns': 5}),
+        Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': ['Ticket'], 'ratio': 0.2}, status='ok', meta={'num_object_columns': 5})
     ]
 
     results, overall = run_data_integrity(mock_signals)

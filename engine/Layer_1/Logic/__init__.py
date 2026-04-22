@@ -18,7 +18,7 @@ import logging
 
 from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity
 from engine.Layer_1.Logic.target_sanity_logic import run_target_viability
-from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy_logic as run_sample_adequacy
+from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy
 from engine.Layer_1.primary_issues import generate_primary_issues
 
 logger = logging.getLogger(__name__)
@@ -61,94 +61,71 @@ def _build_dimension_dict(
     return dimension
 
 
-def _result_to_dimension_dict(result, dimension_signals: dict) -> dict:
-    """
-    Convert a TestResult dataclass to the dimension dict format
-    that formatter.py expects.
-    """
-    breakdown = {}
-    if result.metrics and "risk_breakdown" in result.metrics:
-        breakdown = result.metrics["risk_breakdown"]
-
-    dominant_risks = breakdown.get("dominant", {})
-    additive_risks = breakdown.get("additive", {})
-
-    return _build_dimension_dict(
-        dimension_signals=dimension_signals,
-        dominant_risks=dominant_risks,
-        additive_risks=additive_risks,
-        total_risk=result.risk,
-        status=result.status,
-        interpretation=result.reason,
-    )
+def _build_breakdown(results: list) -> tuple:
+    dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
+    additive = {r.name: r.risk for r in results if 0 < r.risk < 0.5 and r.label != "ERROR"}
+    
+    # ensure any ERROR states are marked somehow, or just excluded from breakdown
+    # If they failed, their risk is 1.0 but they are not 'dominant' structural risks, they are errors.
+    errors = {r.name: 1.0 for r in results if r.label == "ERROR"}
+    if errors:
+        dominant.update(errors)
+        
+    return dominant, additive
 
 
-def evaluate_data_integrity(signals: dict) -> dict:
+def evaluate_data_integrity(structures: list, flat_signals: dict) -> dict:
     """Evaluate data integrity dimension."""
     logger.info("Evaluating data_integrity dimension")
 
     dim_signals = {
-        k: signals[k] for k in [
+        k: flat_signals[k] for k in [
             "rows", "cols",
             "global_missing_ratio", "column_missing_ratio",
             "duplicate_ratio", "constant_columns", "constant_ratio",
             "hidden_missing_ratio", "mixed_type_columns", "mixed_ratio"
-        ] if k in signals
+        ] if k in flat_signals
     }
 
-    result = run_data_integrity(signals)
-
-    if result.metrics and "risk_breakdown" in result.metrics:
-        return _result_to_dimension_dict(result, dim_signals)
+    dim_structs = [s for s in structures if s.dimension == "data_integrity"]
+    results, overall = run_data_integrity(dim_structs)
+    dominant_risks, additive_risks = _build_breakdown(results)
 
     return _build_dimension_dict(
         dimension_signals=dim_signals,
-        dominant_risks={result.name: result.risk},
-        additive_risks={},
-        total_risk=result.risk,
-        status=result.status,
-        interpretation=result.reason,
+        dominant_risks=dominant_risks,
+        additive_risks=additive_risks,
+        total_risk=overall.risk,
+        status=overall.status,
+        interpretation=overall.reason,
     )
 
 
-def evaluate_target_viability(signals: dict) -> dict:
+def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
     """Evaluate target viability dimension."""
     logger.info("Evaluating target_viability dimension")
 
     dim_signals = {
-        k: signals.get(k) for k in [
-            "target_missing_ratio", "target_unique_count",
-            "class_imbalance_score", "target_variance",
+        k: flat_signals.get(k) for k in [
+            "target_missing_ratio", "target_degeneracy_flag",
+            "dominant_class_ratio", "target_entropy",
+            "type_contamination_ratio", "dataset_shape",
             "task_type", "task_confidence"
-        ] if k in signals
+        ] if k in flat_signals
     }
 
-    target_signals = dict(signals)
-    target_signals.setdefault("target_missing_ratio", 0.0)
-    target_signals.setdefault("target_unique_count", 2)
-
+    dim_structs = [s for s in structures if s.dimension == "target_viability"]
     try:
-        result = run_target_viability(target_signals)
-        if result is None:
-            return _build_dimension_dict(
-                dimension_signals=dim_signals,
-                dominant_risks={},
-                additive_risks={},
-                total_risk=0.0,
-                status="SAFE",
-                interpretation="No target-specific structural risk detected in Layer 1.",
-            )
-
-        if result.metrics and "risk_breakdown" in result.metrics:
-            return _result_to_dimension_dict(result, dim_signals)
+        results, overall = run_target_viability(dim_structs)
+        dominant_risks, additive_risks = _build_breakdown(results)
 
         return _build_dimension_dict(
             dimension_signals=dim_signals,
-            dominant_risks={result.name: result.risk},
-            additive_risks={},
-            total_risk=result.risk,
-            status=result.status,
-            interpretation=result.reason,
+            dominant_risks=dominant_risks,
+            additive_risks=additive_risks,
+            total_risk=overall.risk,
+            status=overall.status,
+            interpretation=overall.reason,
         )
     except Exception as e:
         logger.warning(f"Target viability evaluation failed: {e}, defaulting to SAFE")
@@ -162,36 +139,27 @@ def evaluate_target_viability(signals: dict) -> dict:
         )
 
 
-def evaluate_sample_adequacy(signals: dict) -> dict:
+def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
     """Evaluate sample adequacy dimension."""
     logger.info("Evaluating sample_adequacy dimension")
 
     dim_signals = {
-        k: signals.get(k) for k in [
-            "rows", "cols", "sample_feature_ratio"
-        ] if k in signals
+        k: flat_signals.get(k) for k in [
+            "duplicated_ratio", "effective_sample_score",
+            "sample_dependency_score", "label_noise_proxy",
+            "feature_variance_score", "marginal_coverage", "joint_coverage"
+        ] if k in flat_signals
     }
 
-    result = run_sample_adequacy(signals)
-
-    if result is None:
-        return _build_dimension_dict(
-            dimension_signals=dim_signals,
-            dominant_risks={},
-            additive_risks={},
-            total_risk=0.0,
-            status="SAFE",
-            interpretation="Sufficient sample size relative to feature space. Low structural risk.",
-        )
-
-    if result.metrics and "risk_breakdown" in result.metrics:
-        return _result_to_dimension_dict(result, dim_signals)
+    dim_structs = [s for s in structures if s.dimension == "sample_adequacy"]
+    results, overall = run_sample_adequacy(dim_structs)
+    dominant_risks, additive_risks = _build_breakdown(results)
 
     return _build_dimension_dict(
         dimension_signals=dim_signals,
-        dominant_risks={result.name: result.risk},
-        additive_risks={},
-        total_risk=result.risk,
-        status=result.status,
-        interpretation=result.reason,
+        dominant_risks=dominant_risks,
+        additive_risks=additive_risks,
+        total_risk=overall.risk,
+        status=overall.status,
+        interpretation=overall.reason,
     )

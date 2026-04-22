@@ -9,20 +9,22 @@ import logging
 
 from engine.Layer_1.Signals.data_integrity_signals import run_signal_extraction as _run_integrity_signals
 from engine.Layer_1.Signals.sample_adequacy_signals import run_sample_adequacy as _run_sample_signals
-from engine.Layer_1.Signals.target_sanity_signals import run_target_signals
+from engine.Layer_1.Signals.target_sanity_signals import run_target_sanity as _run_target_signals
 
 logger = logging.getLogger(__name__)
 
 
-def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) -> dict:
+def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) -> tuple[dict, list]:
     """
-    Run all signal modules and merge into a single flat dict.
+    Run all signal modules and merge into a single flat dict and list of structures.
     This is what pipeline.py calls as `signals.run_signal_extraction(df)`.
     """
     flat = {}
+    structures = []
 
     # ── Data integrity signals ──
     integrity_results = _run_integrity_signals(df)
+    structures.extend(integrity_results)
     for struct in integrity_results:
         name = struct.name
         value = struct.value
@@ -46,6 +48,7 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
 
     # ── Sample adequacy signals ──
     sample_results = _run_sample_signals(df)
+    structures.extend(sample_results)
     for struct in sample_results:
         name = struct.name
         value = struct.value
@@ -61,7 +64,8 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
 
     # Target viability signals
     if target_column and target_column in df.columns:
-        target_results = run_target_signals(df[target_column])
+        target_results = _run_target_signals(df[target_column])
+        structures.extend(target_results)
         for struct in target_results:
             name = struct.name
             value = struct.value
@@ -89,4 +93,4 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
                 flat[name] = value
 
     logger.info(f"Signal extraction complete: {len(flat)} keys")
-    return flat
+    return flat, structures

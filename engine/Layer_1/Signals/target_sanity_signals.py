@@ -211,7 +211,7 @@ REQUIRED_SIGNALS = {
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_target_signals(y: pd.Series) -> List[Structure]:
+def run_target_sanity(y: pd.Series) -> List[Structure]:
 
     y_clean = clean_target(y)
     validation = validate_target(y_clean)
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     example_target_col = pd.Series(["NY", "LA", "SF", "NY", "LA", "None", "  ", "NY", "LA", "SF", "NY", "LA", "np.nan"])
     # example_target_col = pd.Series([])
     print("--- Running Target Signals ---")
-    results = run_target_signals(example_target_col)
+    results = run_target_sanity(example_target_col)
     
     for res in results:
         # print(f"{res.name}:")

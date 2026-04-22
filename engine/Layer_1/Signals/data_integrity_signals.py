@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -18,7 +18,7 @@ class Structure:
     name: str
     value: Any
     status: str  # "ok", "no_value", "error"
-    meta: Optional[Dict] = None
+    meta: Dict[str, Any]
 
 
 DIMENSION = "data_integrity"
@@ -87,7 +87,7 @@ def dataset_shape(df: pd.DataFrame) -> Structure:
         "dataset_shape",
         {"rows": int(rows), "cols": int(cols)},
         "ok",
-        None
+        {"total_cells": int(rows * cols)}
     )
     enforce(signal)
     return signal
@@ -198,6 +198,15 @@ def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
     ignore = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
     obj_cols = df.select_dtypes(include="object")
 
+    if len(obj_cols.columns) == 0:
+        return Structure(
+            DIMENSION,
+            "mixed_type_columns_ratio",
+            None,
+            "no_value",
+            {"reason": "no object columns"}
+        )
+
     mixed = []
 
     for col in obj_cols:
@@ -284,8 +293,12 @@ if __name__ == "__main__":
     
     # df = pd.DataFrame({"col1" : [], "col2" : []})
 
-    # results = run_signal_extraction(df)
-    # for r in results:
-    #     print(r)
+    df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
     
-    print(duplicated_ratio(df))
+    
+    results = run_signal_extraction(df)
+    for r in results:
+        print(r)
+    
+    
+    

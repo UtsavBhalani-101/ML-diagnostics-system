@@ -91,24 +91,24 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
 def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
     try:
         logger.info("Running signal extraction")
-        signal_output = signals.run_signal_extraction(df, target_column=target_column)
+        flat_signals, signal_structures = signals.run_signal_extraction(df, target_column=target_column)
 
         # 2. Facts
-        facts = compute_facts(df, signal_output)
+        facts = compute_facts(df, flat_signals)
 
         # 3. Dimension Evaluations
         logger.info("Evaluating dimensions")
 
         dimensions = {
-            "data_integrity": logic.evaluate_data_integrity(signal_output),
-            "target_viability": logic.evaluate_target_viability(signal_output),
-            "sample_adequacy": logic.evaluate_sample_adequacy(signal_output),
+            "data_integrity": logic.evaluate_data_integrity(signal_structures, flat_signals),
+            "target_viability": logic.evaluate_target_viability(signal_structures, flat_signals),
+            "sample_adequacy": logic.evaluate_sample_adequacy(signal_structures, flat_signals),
         }
 
         result = {
             "data_loaded": True,
             "shape": df.shape,
-            "signals": signal_output,
+            "signals": flat_signals,
             "logic": {
                 "facts": facts,
                 "dimensions": dimensions,
@@ -136,5 +136,19 @@ def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        res = run_pipeline(sys.argv[1])
-        print(res["status"])
+        filepath = sys.argv[1]
+        try:
+            if filepath.endswith('.parquet'):
+                df = pd.read_parquet(filepath)
+            else:
+                df = pd.read_csv(filepath)
+        except Exception as e:
+            print(f"Failed to load data from {filepath}: {e}")
+            sys.exit(1)
+            
+        res = run_pipeline_from_df(df)
+        from engine.Layer_1.report import print_layer1_report
+        print_layer1_report(res)
+    else:
+        print("Usage: python pipeline.py <path_to_dataset>")
+        sys.exit(1)
