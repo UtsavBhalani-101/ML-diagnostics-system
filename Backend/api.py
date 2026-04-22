@@ -404,6 +404,34 @@ async def run_diagnostics(
     df = load_dataframe_from_bytes(content, filename)
     resolved_target = _resolve_target_column(df.columns.tolist(), target_column)
     result = run_pipeline_from_df(df, resolved_target)
+
+    # Convert shape tuple to list for strict Pydantic validation
+    if "shape" in result and isinstance(result["shape"], tuple):
+        result["shape"] = list(result["shape"])
+
+    # Map the new Layer 1 status outputs back to SAFE/WARNING/CRITICAL
+    if "final_output" in result and result.get("status") == "success":
+        status_map = {
+            "PROCEED": "SAFE",
+            "REVIEW": "WARNING",
+            "STOP": "CRITICAL"
+        }
+        
+        failing_count = 0
+        dimensions = result["final_output"].get("dimensions", {})
+        
+        for dim_name, dim_data in dimensions.items():
+            if dim_data.get("status") in status_map:
+                dim_data["status"] = status_map[dim_data["status"]]
+            if dim_data.get("status") != "SAFE":
+                failing_count += 1
+                
+        overall = result["final_output"].get("overall", {})
+        if overall.get("status") in status_map:
+            overall["status"] = status_map[overall["status"]]
+            
+        overall["failing_dimensions"] = failing_count
+
     return Layer1OutputResponse(**result)
 
 
