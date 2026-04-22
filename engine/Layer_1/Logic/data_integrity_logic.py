@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Ensure the root directory is on the path so 'engine' can be imported when running standalone
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+
 from dataclasses import dataclass
 import numpy as np
 import logging

@@ -340,6 +340,6 @@ if __name__ == "__main__":
 
     results, overall = run_target_viability(mock_signals)
 
-    # for r in results:
-    # print(r)
-    # print(overall)
+    for r in results:
+        print(r)
+        print(overall)
