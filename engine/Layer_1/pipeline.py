@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import sys
-import traceback
 import logging
 
 from engine.Layer_1 import Signals as signals
@@ -137,6 +136,8 @@ def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         filepath = sys.argv[1]
+        target_column = sys.argv[2] if len(sys.argv) > 2 else None
+        
         try:
             if filepath.endswith('.parquet'):
                 df = pd.read_parquet(filepath)
@@ -146,9 +147,9 @@ if __name__ == "__main__":
             print(f"Failed to load data from {filepath}: {e}")
             sys.exit(1)
             
-        res = run_pipeline_from_df(df)
+        res = run_pipeline_from_df(df, target_column=target_column)
         from engine.Layer_1.report import print_layer1_report
         print_layer1_report(res)
     else:
-        print("Usage: python pipeline.py <path_to_dataset>")
+        print("Usage: python pipeline.py <path_to_dataset> [target_column]")
         sys.exit(1)

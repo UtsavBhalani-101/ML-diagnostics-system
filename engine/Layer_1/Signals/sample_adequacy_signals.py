@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
 
 
 FAILURE_MODES = [
@@ -23,7 +23,7 @@ class Structure:
     name: str
     value: Any
     status: str
-    meta: Optional[Dict] = None
+    meta: Dict[str, Any]
 
 DIMENSION = "sample_adequacy"
 
@@ -49,8 +49,36 @@ def validate_data(df: pd.DataFrame):
 
 # ------------------ HELPERS ------------------
 
-def _feature_matrix(df):
-    return pd.get_dummies(df, dummy_na=True)
+def _feature_matrix(df, cardinality_threshold=20):
+    
+    numeric = df.select_dtypes(include=[np.number])
+    
+    obj_cols = df.select_dtypes(include="object")
+    
+    # try to cast string columns to numeric first
+    coerced = {}
+    categorical = []
+    
+    for col in obj_cols.columns:
+        attempted = pd.to_numeric(obj_cols[col], errors="coerce")
+        if attempted.notna().mean() > 0.8:  # mostly numeric
+            coerced[col] = attempted
+        elif obj_cols[col].nunique() <= cardinality_threshold:
+            categorical.append(col)
+        # else drop — high cardinality string, useless for distance
+    
+    parts = [numeric]
+    
+    if coerced:
+        parts.append(pd.DataFrame(coerced))
+    
+    if categorical:
+        parts.append(pd.get_dummies(obj_cols[categorical], dummy_na=True))
+    
+    # return pd.concat(parts, axis=1)
+    result = pd.concat(parts, axis=1)
+
+    return result.astype(float)
 
 def _nan_safe_distance(diff):
     mask = ~np.isnan(diff)
@@ -143,47 +171,6 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
     enforce(signal)
     return signal
 
-def label_noise_proxy(df: pd.DataFrame, y: Optional[pd.Series] = None, k: int = 5) -> Structure:
-    """
-    Measures local label inconsistency.
-    For each point, checks if neighbors have same label.
-    """
-
-    if y is None or len(y) != len(df):
-        return Structure(DIMENSION, "label_noise_proxy", None, "no_value")
-
-    X = _feature_matrix(df)
-
-    if X.shape[0] < k + 1 or X.shape[1] == 0:
-        return Structure(DIMENSION, "label_noise_proxy", None, "no_value")
-
-    arr = X.values
-    labels = y.values
-
-    inconsistencies = []
-
-    for i in range(len(arr)):
-        diff = arr - arr[i]
-        dist = _nan_safe_distance(diff)
-        dist[i] = np.inf
-
-        nn_idx = np.argsort(dist)[:k]
-        nn_labels = labels[nn_idx]
-
-        mismatch = np.mean(nn_labels != labels[i])
-        inconsistencies.append(mismatch)
-
-    score = float(np.mean(inconsistencies))
-
-    signal = Structure(
-        DIMENSION,
-        "label_noise_proxy",
-        score,
-        "ok",
-        {"avg_local_mismatch": score, "k": k}
-    )
-    enforce(signal)
-    return signal
 
 
 # ------------------ FAILURE MODE B ------------------
@@ -283,7 +270,6 @@ SIGNALS_REGISTRY = [
     duplicated_ratio,
     effective_sample_size,
     sample_dependency_score,
-    label_noise_proxy,
     feature_variance_score,
     marginal_coverage,
     joint_coverage
@@ -293,7 +279,6 @@ REQUIRED_SIGNALS = {
     "duplicated_ratio": float,
     "effective_sample_size": float,
     "sample_dependency_score": float,
-    "label_noise_proxy" : float,
     "feature_variance_score": float,
     "marginal_coverage": float,
     "joint_coverage": float
@@ -330,9 +315,11 @@ if __name__ == "__main__":
         "city": ["NY", "LA", "SF", "NY", "LA", "NY", "LA", "SF", "NY", "LA"],
         'missing' : [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     })
+    
+    df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
 
     results = run_sample_adequacy(df)
     for r in results:
         print(r)
     
-    print(_feature_matrix(df))
+    # print(_feature_matrix(df))

@@ -24,7 +24,6 @@ ASSUMPTIONS = [
 ]
 
 
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -125,12 +124,12 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
     flag = get_value(signal_map, "target_degeneracy_flag")
-    
+
     if flag is True:
         label = "CRITICAL"
     else:
         label = "SAFE"
-        
+
     return TestResult(
         dimension=DIMENSION,
         name="target_degeneracy_risk",
@@ -143,15 +142,14 @@ def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
     ratio = get_value(signal_map, "dominant_class_ratio")
-    
+
     if ratio > 0.95:
         label = "CRITICAL"
     elif ratio > 0.8:
         label = "WARNING"
     else:
         label = "SAFE"
-        
-    
+
     return TestResult(
         dimension=DIMENSION,
         name="dominance_class_risk",
@@ -163,145 +161,106 @@ def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 
 def target_entropy_risk(signal_map: Dict[str, Structure]) -> TestResult:
-      signal = signal_map["target_entropy"]
+    signal = signal_map["target_entropy"]
 
-      entropy = signal.value
-      num_classes = signal.meta["num_classes"]
+    entropy = signal.value
+    num_classes = signal.meta["num_classes"]
 
-      if num_classes <= 1:
-          normalized_entropy = 0.0
-      else:
-          max_entropy = float(np.log2(num_classes))
-          normalized_entropy = entropy / max_entropy
+    if num_classes <= 1:
+        normalized_entropy = 0.0
+    else:
+        max_entropy = float(np.log2(num_classes))
+        normalized_entropy = entropy / max_entropy
 
-      if normalized_entropy >= 0.8:
-          label = "SAFE"
-      elif normalized_entropy >= 0.5:
-          label = "WARNING"
-      else:
-          label = "CRITICAL"
+    if normalized_entropy >= 0.8:
+        label = "SAFE"
+    elif normalized_entropy >= 0.5:
+        label = "WARNING"
+    else:
+        label = "CRITICAL"
 
-      return TestResult(
-          dimension=DIMENSION,
-          name="target_entropy_risk",
-          label=label,
-          reason=(
-              f"target entropy: {entropy:.4f}, "
-              f"normalized: {normalized_entropy:.4f}, "
-              f"classes: {num_classes}"
-          ),
-          risk=1 - normalized_entropy,
-          metrics={
-              "entropy": entropy,
-              "normalized_entropy": normalized_entropy,
-              "num_classes": num_classes,
-          }
-      )
+    return TestResult(
+        dimension=DIMENSION,
+        name="target_entropy_risk",
+        label=label,
+        reason=(
+            f"target entropy: {entropy:.4f}, "
+            f"normalized: {normalized_entropy:.4f}, "
+            f"classes: {num_classes}"
+        ),
+        risk=1 - normalized_entropy,
+        metrics={
+            "entropy": entropy,
+            "normalized_entropy": normalized_entropy,
+            "num_classes": num_classes,
+        },
+    )
+
 
 def type_contamination_risk(signal_map: Dict[str, Structure]) -> TestResult:
     ratio = get_value(signal_map, "type_contamination_ratio")
-    
+
     if ratio > 0.1:
         label = "CRITICAL"
     elif ratio > 0.05:
         label = "WARNING"
     else:
         label = "SAFE"
-        
-    
+
     return TestResult(
         dimension=DIMENSION,
         name="type_contamination_risk",
         label=label,
         reason=f"type_contamination ratio: {ratio}",
         risk=ratio,
-        metrics=None
+        metrics=None,
     )
 
 
-
-def evaluate_task_type(signal_map: Dict[str, Structure]) -> TestResult:
-    degeneracy_signal = signal_map["target_degeneracy_flag"]
-    if degeneracy_signal.status != "ok":
-        raise ValueError("target_degeneracy_flag unusable")
-    
-    unique_count = degeneracy_signal.meta["unique_values"]
-    shape = get_value(signal_map, "dataset_shape")
-    total = shape["rows"]
-
-    unique_ratio = unique_count / total
-
-    if unique_count <= 20:
-        task = "classification"
-        confidence = 1 - (unique_count / 20)
-
-    elif unique_ratio > 0.05:
-        task = "regression"
-        confidence = min(1.0, unique_ratio / 0.05)
-
-    else:
-        task = "ambiguous"
-        confidence = 0.5
-
-    if confidence < 0.4:
-        label = "UNACCEPTABLE"
-        reason = "Low confidence in task type"
-    elif confidence < 0.7:
-        label = "CONCERN"
-        reason = "Ambiguous task type"
-    else:
-        label = "ACCEPTABLE"
-        reason = "Clear task type"
-
-    return TestResult(
-        dimension=DIMENSION,
-        name="task_type_inference",
-        label=label,
-        reason=reason,
-        risk=1 - confidence,
-        metrics={
-            "task_type": task,
-            "confidence": round(confidence, 3),
-            "unique_ratio": round(unique_ratio, 4),
-        },
-    )
+# ! evaluate task type is a global property, move it out
 
 
 LOGIC_REGISTRY = [
-    missing_risk, 
-    target_degeneracy_risk, 
-    dominant_class_risk, 
-    target_entropy_risk, 
-    type_contamination_risk, 
-    evaluate_task_type
+    missing_risk,
+    target_degeneracy_risk,
+    dominant_class_risk,
+    target_entropy_risk,
+    type_contamination_risk,
 ]
 
 
 # ------------------ AGGREGATION ------------------
 
 
-def aggregate_risk(results: List[TestResult]) -> OverallResult:
+LABEL_WEIGHTS = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0, "ERROR": 1.0}
 
-    risks = [r.risk for r in results if r.label != "ERROR"]
 
-    if not risks:
+def aggregate_risk(results):
+    valid = [r for r in results if r.label in LABEL_WEIGHTS]
+
+    if not valid:
         return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
 
-    total_risk = 1 - np.prod([1 - r for r in risks])
+    weighted = 0
 
-    if total_risk >= 0.7:
+    # severity-weighted average
+    weighted = sum(LABEL_WEIGHTS[r.label] * r.risk for r in valid)
+    print(weighted)
+    total = sum(LABEL_WEIGHTS[r.label] for r in valid)
+    score = weighted / total if total > 0 else 0.0
+
+    # label still driven by worst case
+    if any(r.label == "CRITICAL" for r in valid):
         status = "STOP"
-    elif total_risk >= 0.3:
+    elif any(r.label == "WARNING" for r in valid):
         status = "REVIEW"
     else:
         status = "PROCEED"
 
     return OverallResult(
-        DIMENSION,
-        status,
-        f"Aggregated risk={total_risk:.3f}",
-        total_risk
+        dimension=DIMENSION, status=status, reason=f"score={score:.3f}", risk=score
     )
+
 
 # ------------------ ORCHESTRATOR ------------------
 
@@ -335,16 +294,52 @@ def run_target_viability(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension=DIMENSION, name='target_missing_ratio', value=0.05, status='ok'),
-        Structure(dimension=DIMENSION, name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 10}),
-        Structure(dimension=DIMENSION, name='dominant_class_ratio', value=0.4, status='ok'),
-        Structure(dimension=DIMENSION, name='target_entropy', value=0.9, status='ok'),
-        Structure(dimension=DIMENSION, name='type_contamination_ratio', value=0.0, status='ok'),
-        Structure(dimension=DIMENSION, name='dataset_shape', value={'rows': 1000}, status='ok')
+        Structure(
+            dimension="target_viability",
+            name="target_missing_ratio",
+            value=0.0,
+            status="ok",
+            meta={"n_samples": 891},
+        ),
+        Structure(
+            dimension="target_viability",
+            name="target_degeneracy_flag",
+            value=False,
+            status="ok",
+            meta={"unique_values": 2},
+        ),
+        Structure(
+            dimension="target_viability",
+            name="dominant_class_ratio",
+            value=0.6161616161616161,
+            status="ok",
+            meta={"n_samples": 891},
+        ),
+        Structure(
+            dimension="target_viability",
+            name="target_entropy",
+            value=0.9607078989902569,
+            status="ok",
+            meta={"num_classes": 2},
+        ),
+        Structure(
+            dimension="target_viability",
+            name="type_contamination_ratio",
+            value=0.0,
+            status="ok",
+            meta={"major_type": "<class 'str'>"},
+        ),
+        Structure(
+            dimension="target_viability",
+            name="dataset_shape",
+            value={"rows": 891, "cols": 1},
+            status="ok",
+            meta={"n_samples": 891},
+        ),
     ]
 
     results, overall = run_target_viability(mock_signals)
 
-    for r in results:
-        print(r)
-    print(overall)
+    # for r in results:
+    # print(r)
+    # print(overall)

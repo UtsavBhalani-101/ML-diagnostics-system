@@ -154,25 +154,6 @@ def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
         metrics={"step_distance": float(score)}
     )
 
-def label_noise_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    score = get_value(signal_map, "label_noise_proxy")
-    risk = float(score)
-    
-    if risk > 0.4:
-        label = "CRITICAL"
-    elif risk > 0.2:
-        label = "WARNING"
-    else:
-        label = "SAFE"
-        
-    return TestResult(
-        dimension=DIMENSION,
-        name="label_noise_risk",
-        label=label,
-        reason=f"Label noise proxy = {score:.3f}",
-        risk=risk,
-        metrics={"noise_proxy": risk}
-    )
 
 def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
     ratio = get_value(signal_map, "feature_variance_score")
@@ -240,7 +221,6 @@ LOGIC_REGISTRY = [
     duplicated_risk,
     effective_sample_size_risk,
     sample_dependency_risk,
-    label_noise_risk,
     feature_variance_risk,
     marginal_coverage_risk,
     joint_coverage_risk
@@ -301,13 +281,12 @@ def run_sample_adequacy(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension=DIMENSION, name='duplicated_ratio', value=0.1, status='ok'),
-        Structure(dimension=DIMENSION, name='effective_sample_size', value=1.5, status='ok'),
-        Structure(dimension=DIMENSION, name='sample_dependency_score', value=1.2, status='ok'),
-        Structure(dimension=DIMENSION, name='label_noise_proxy', value=0.1, status='ok'),
-        Structure(dimension=DIMENSION, name='feature_variance_score', value=0.1, status='ok'),
-        Structure(dimension=DIMENSION, name='marginal_coverage', value=0.9, status='ok'),
-        Structure(dimension=DIMENSION, name='joint_coverage', value=0.8, status='ok')
+        Structure(dimension='sample_adequacy', name='duplicated_ratio', value=0.0, status='ok', meta={'n': 891}),
+        Structure(dimension='sample_adequacy', name='effective_sample_size', value=2.8023705022704237, status='ok', meta={'avg_nn_distance': 2.8023705022704237}),
+        Structure(dimension='sample_adequacy', name='sample_dependency_score', value=11.466907040283509, status='ok', meta={'avg_step_distance': 11.466907040283509}),
+        Structure(dimension='sample_adequacy', name='feature_variance_score', value=0.07142857142857142, status='ok', meta={'low_variance_ratio': 0.07142857142857142}),
+        Structure(dimension='sample_adequacy', name='marginal_coverage', value=0.31428571428571417, status='ok', meta={'avg_bin_coverage': 0.31428571428571417}),
+        Structure(dimension='sample_adequacy', name='joint_coverage', value=1.0, status='ok', meta={'grid_fill': 1.0})
     ]
 
     results, overall = run_sample_adequacy(mock_signals)

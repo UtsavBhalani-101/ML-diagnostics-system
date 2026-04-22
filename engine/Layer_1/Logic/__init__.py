@@ -63,7 +63,7 @@ def _build_dimension_dict(
 
 def _build_breakdown(results: list) -> tuple:
     dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
-    additive = {r.name: r.risk for r in results if 0 < r.risk < 0.5 and r.label != "ERROR"}
+    additive = {r.name: r.risk for r in results if 0.0 < r.risk < 0.5 and r.label != "ERROR"}
     
     # ensure any ERROR states are marked somehow, or just excluded from breakdown
     # If they failed, their risk is 1.0 but they are not 'dominant' structural risks, they are errors.
@@ -109,8 +109,7 @@ def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
         k: flat_signals.get(k) for k in [
             "target_missing_ratio", "target_degeneracy_flag",
             "dominant_class_ratio", "target_entropy",
-            "type_contamination_ratio", "dataset_shape",
-            "task_type", "task_confidence"
+            "type_contamination_ratio", "dataset_shape", "task_confidence"
         ] if k in flat_signals
     }
 
@@ -146,8 +145,8 @@ def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
     dim_signals = {
         k: flat_signals.get(k) for k in [
             "duplicated_ratio", "effective_sample_score",
-            "sample_dependency_score", "label_noise_proxy",
-            "feature_variance_score", "marginal_coverage", "joint_coverage"
+            "sample_dependency_score","feature_variance_score", 
+            "marginal_coverage", "joint_coverage"
         ] if k in flat_signals
     }
 

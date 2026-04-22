@@ -48,22 +48,21 @@ HIDDEN_MISSING = {"na", "n/a", "null", "none", "", " ", "?", "unknown", "np.nan"
 # ------------------ UTILITIES ------------------
 
 def clean_target(y) -> pd.Series:
-    y = pd.Series(y)
+    y_clean = pd.Series(y).copy()
 
-    # Step 1: preserve true missing
-    mask_missing = y.isna()
+    # Step 1: process only string elements
+    if y_clean.dtype == object or pd.api.types.is_string_dtype(y_clean):
+        is_str = y_clean.map(lambda x: isinstance(x, str))
+        if is_str.any():
+            y_clean.loc[is_str] = (
+                y_clean.loc[is_str]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
 
-    # Step 2: process only non-missing
-    y_clean = y.copy()
-    y_clean[~mask_missing] = (
-        y_clean[~mask_missing]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    # Step 3: replace hidden missing
-    y_clean = y_clean.replace(HIDDEN_MISSING, np.nan)
+    # Step 2: replace hidden missing
+    y_clean = y_clean.replace(list(HIDDEN_MISSING), np.nan)
 
     return y_clean
 
@@ -81,7 +80,7 @@ def validate_target(y: pd.Series) -> Dict:
         return {"status": "fail", "reason": "Target is empty"}    
         
     if y.isna().all():
-        return {"status": "fail", "reason": "Target is entirely filled with missing"}
+        return {"status": "fail", "reason": "Target is entirely filled with np.nan missing"}
 
     return {"status": "pass", "y": y}
 
@@ -258,8 +257,12 @@ if __name__ == "__main__":
     # example_target_col = pd.Series([1, 0, 1, 1, "NA", np.nan, 0, 1, 1, 0, 0, 1, "", " ", None])
     example_target_col = pd.Series(["NY", "LA", "SF", "NY", "LA", "None", "  ", "NY", "LA", "SF", "NY", "LA", "np.nan"])
     # example_target_col = pd.Series([])
+
+    df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
+    target_col = df['Survived']
+
     print("--- Running Target Signals ---")
-    results = run_target_sanity(example_target_col)
+    results = run_target_sanity(target_col)
     
     for res in results:
         # print(f"{res.name}:")
@@ -268,5 +271,4 @@ if __name__ == "__main__":
         
         print(res)
 
-    print(dataset_shape(clean_target(example_target_col)))
     # print(clean_target(example_target_col))

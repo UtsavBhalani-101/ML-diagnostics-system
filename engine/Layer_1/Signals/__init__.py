@@ -35,12 +35,12 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
             flat["cols"] = value.get("cols", 0)
         elif name == "column_missing_ratio" and isinstance(value, dict):
             flat["column_missing_ratio"] = value
-        elif name == "constant_columns" and isinstance(value, dict):
+        elif name == "constant_columns_ratio" and isinstance(value, dict):
             flat["constant_columns"] = value.get("columns", [])
             flat["constant_ratio"] = value.get("ratio", 0.0)
         elif name == "hidden_missing_ratio" and isinstance(value, dict):
             flat["hidden_missing_ratio"] = value
-        elif name == "mixed_type_columns" and isinstance(value, dict):
+        elif name == "mixed_type_columns_ratio" and isinstance(value, dict):
             flat["mixed_type_columns"] = value.get("columns", [])
             flat["mixed_ratio"] = value.get("ratio", 0.0)
         else:
@@ -52,14 +52,7 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
     for struct in sample_results:
         name = struct.name
         value = struct.value
-        # Only add if not already present (rows/cols from integrity)
-        if name == "dataset_size":
-            flat.setdefault("rows", value)
-        elif name == "feature_count":
-            flat.setdefault("cols", value)
-        elif name == "n_to_d_ratio":
-            flat["sample_feature_ratio"] = value
-        else:
+        if value is not None:
             flat.setdefault(name, value)
 
     # Target viability signals
@@ -73,20 +66,12 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
 
             if name == "target_validation":
                 reason = str(meta.get("reason", "")).lower()
-                if "entirely missing" in reason:
+                if "entirely missing" in reason or "empty" in reason:
                     flat["target_missing_ratio"] = 1.0
-                    flat["target_unique_count"] = 0
-                if "mixed data types" in reason:
-                    flat["target_mixed_type"] = True
+                    flat["target_degeneracy_flag"] = True
                 continue
 
-            if name == "task_type":
-                flat["task_type"] = value
-                flat["task_confidence"] = meta.get("confidence", 0.0)
-                continue
-
-            if value is None and name == "class_imbalance_score":
-                flat[name] = 0.0
+            if name == "dataset_shape":
                 continue
 
             if value is not None:
