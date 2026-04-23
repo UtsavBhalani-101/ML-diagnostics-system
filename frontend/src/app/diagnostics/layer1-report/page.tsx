@@ -74,7 +74,6 @@ export default function Layer1ReportPage() {
     if (pageState === "loading") {
         return (
             <main className="flex min-h-[calc(100vh-8rem)] flex-grow items-center justify-center">
-                <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
                 <div className="relative z-10 flex flex-col items-center gap-4">
                     <div className="size-12 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
                     <p className="font-mono text-sm tracking-wide text-muted-foreground">
@@ -88,9 +87,8 @@ export default function Layer1ReportPage() {
     if (pageState === "empty" || !data) {
         return (
             <main className="flex min-h-[calc(100vh-8rem)] flex-grow items-center justify-center">
-                <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
                 <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center">
-                    <div className="flex size-16 items-center justify-center rounded-lg border border-white/10 bg-white/5">
+                    <div className="flex size-16 items-center justify-center rounded-lg border border-border bg-card">
                         <Activity className="size-8 text-muted-foreground" />
                     </div>
                     <div>
@@ -101,7 +99,7 @@ export default function Layer1ReportPage() {
                     </div>
                     <Link
                         href={"/diagnostics" as Route}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-background"
                     >
                         Back to Diagnostics
                     </Link>
@@ -113,15 +111,14 @@ export default function Layer1ReportPage() {
     if (pageState === "error") {
         return (
             <main className="flex min-h-[calc(100vh-8rem)] flex-grow items-center justify-center">
-                <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
                 <div className="relative z-10 flex max-w-lg flex-col items-center gap-6 px-6 text-center">
                     <h2 className="text-xl font-semibold">Validation report could not be loaded.</h2>
-                    <p className="font-mono text-sm text-red-400">
+                    <p className="font-mono text-sm text-red-500">
                         {errorMessage || "Unexpected error while loading the report."}
                     </p>
                     <Link
                         href={"/diagnostics" as Route}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-background"
                     >
                         Back to Diagnostics
                     </Link>
@@ -134,8 +131,6 @@ export default function Layer1ReportPage() {
 
     return (
         <main className="relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
-            <div className="pointer-events-none absolute inset-0 z-0 bg-grid-pattern" />
-
             <section className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-12 md:px-8">
                 <div className="flex items-center gap-3">
                     <Link
@@ -221,17 +216,17 @@ function DecisionBanner({ decision }: { decision: ValidationDecision }) {
             : ShieldCheck;
 
     return (
-        <section className={clsx("rounded-lg border p-6 md:p-8", styles.panel)}>
+        <section className={clsx("rounded-lg border border-l-4 bg-card p-6 md:p-8", styles.panel)}>
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div className="flex gap-4">
-                    <div className={clsx("flex size-12 shrink-0 items-center justify-center rounded-md border", styles.icon)}>
-                        <Icon className="size-7" />
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                        <Icon className={clsx("size-7", styles.icon)} />
                     </div>
                     <div>
                         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
                             System Decision
                         </p>
-                        <h2 className={clsx("mt-2 text-3xl font-black uppercase tracking-tight md:text-5xl", styles.text)}>
+                        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-foreground md:text-5xl">
                             {decision.status}
                         </h2>
                         <p className="mt-3 text-lg font-semibold text-foreground">
@@ -268,9 +263,9 @@ function DecisionFlow({ decision }: { decision: ValidationDecision }) {
     ];
 
     return (
-        <section className="rounded-lg border border-white/[0.08] bg-card/60 p-5 backdrop-blur md:p-6">
+        <section className="rounded-lg border border-border bg-card p-5 md:p-6">
             <div className="mb-5 flex items-center gap-2">
-                <ListChecks className="size-4 text-primary" />
+                <ListChecks className="size-4 text-muted-foreground" />
                 <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     Decision Flow
                 </h2>
@@ -297,9 +292,9 @@ function FlowStep({ step }: { step: { label: string; caption: string; status: Va
     const Icon = step.status === "FAIL" ? OctagonX : step.status === "WARNING" ? TriangleAlert : CheckCircle2;
 
     return (
-        <div className={clsx("rounded-lg border p-4", styles.panel)}>
+        <div className={clsx("rounded-md border border-l-4 bg-card p-4", styles.panel)}>
             <div className="flex items-start gap-3">
-                <Icon className={clsx("mt-0.5 size-5 shrink-0", styles.text)} />
+                <Icon className={clsx("mt-0.5 size-5 shrink-0", styles.icon)} />
                 <div>
                     <p className="font-semibold text-foreground">{step.label}</p>
                     <p className="mt-1 font-mono text-xs text-muted-foreground">{step.caption}</p>
@@ -319,19 +314,19 @@ function DecisionMetric({
     tone: "fail" | "warning" | "pass" | "neutral";
 }) {
     const className = tone === "fail"
-        ? "border-red-500/35 bg-red-500/10 text-red-300"
+        ? "border-l-red-500"
         : tone === "warning"
-            ? "border-yellow-500/35 bg-yellow-500/10 text-yellow-200"
+            ? "border-l-amber-500"
             : tone === "pass"
-                ? "border-green-500/30 bg-green-500/10 text-green-300"
-                : "border-white/[0.08] bg-card/60 text-foreground";
+                ? "border-l-green-500"
+                : "border-l-border";
 
     return (
-        <div className={clsx("rounded-lg border p-5 font-mono backdrop-blur", className)}>
+        <div className={clsx("rounded-lg border border-l-4 border-border bg-card p-5 font-mono", className)}>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                 {label}
             </p>
-            <p className="mt-3 text-3xl font-black tabular-nums">{value}</p>
+            <p className="mt-3 text-3xl font-black tabular-nums text-foreground">{value}</p>
         </div>
     );
 }
@@ -379,9 +374,9 @@ function EvidencePanel({
     children: ReactNode;
 }) {
     return (
-        <div className="rounded-lg border border-white/[0.08] bg-card/60 p-5 backdrop-blur">
+        <div className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-center gap-2">
-                <Icon className="size-4 text-primary" />
+                <Icon className="size-4 text-muted-foreground" />
                 <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     {title}
                 </h3>
@@ -396,11 +391,11 @@ function EvidencePanel({
 function FailureBreakdown({ failures }: { failures: ValidationCheck[] }) {
     if (failures.length === 0) {
         return (
-            <section className="rounded-lg border border-green-500/30 bg-green-500/10 p-5 md:p-6">
+            <section className="rounded-lg border border-l-4 border-border border-l-green-500 bg-card p-5 md:p-6">
                 <div className="flex gap-3">
-                    <FileCheck2 className="mt-0.5 size-5 shrink-0 text-green-300" />
+                    <FileCheck2 className="mt-0.5 size-5 shrink-0 text-green-500" />
                     <div>
-                        <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-green-300">
+                        <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                             Failure Breakdown
                         </h2>
                         <p className="mt-2 text-sm text-foreground">
@@ -428,17 +423,17 @@ function FailureBreakdown({ failures }: { failures: ValidationCheck[] }) {
 
 function FailureItem({ failure }: { failure: ValidationCheck }) {
     return (
-        <article className="rounded-lg border border-red-500/35 bg-red-500/10 p-5">
+        <article className="rounded-lg border border-l-4 border-border border-l-red-500 bg-card p-5">
             <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-red-300">
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-red-500">
                         Failure: {failure.testName}
                     </p>
                     <h3 className="mt-1 text-lg font-semibold text-foreground">
                         {failure.dimensionLabel}
                     </h3>
                 </div>
-                <span className="w-fit rounded-md border border-red-500 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-red-300">
+                <span className="w-fit rounded-md border border-border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground">
                     {failure.impact}
                 </span>
             </div>
@@ -450,8 +445,8 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
                 <BreakdownField label="Direct action" value={failure.action} />
             </div>
 
-            <div className="mt-4 rounded-md border border-red-500/25 bg-black/20 p-3">
-                <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-red-300">
+            <div className="mt-4 rounded-md border border-border bg-background p-3">
+                <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
                     Exact Offending Columns
                 </p>
                 {failure.offendingColumns.length > 0 ? (
@@ -459,7 +454,7 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
                         {failure.offendingColumns.map((column) => (
                             <span
                                 key={column}
-                                className="rounded-md border border-red-500/30 px-2 py-1 font-mono text-xs text-foreground"
+                                className="rounded-md border border-border px-2 py-1 font-mono text-xs text-foreground"
                             >
                                 {column}
                             </span>
@@ -477,16 +472,16 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
 
 function ActionLayer({ title, checks }: { title: string; checks: ValidationCheck[] }) {
     return (
-        <section className="rounded-lg border border-yellow-500/35 bg-yellow-500/10 p-5 md:p-6">
+        <section className="rounded-lg border border-l-4 border-border border-l-amber-500 bg-card p-5 md:p-6">
             <div className="mb-4 flex items-center gap-2">
-                <TriangleAlert className="size-4 text-yellow-200" />
-                <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-yellow-200">
+                <TriangleAlert className="size-4 text-amber-500" />
+                <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     {title}
                 </h2>
             </div>
             <div className="space-y-3">
                 {checks.map((check) => (
-                    <div key={check.id} className="rounded-md border border-yellow-500/25 bg-black/15 p-3">
+                    <div key={check.id} className="rounded-md border border-border bg-background p-3">
                         <p className="font-semibold text-foreground">
                             {check.dimensionLabel}: {check.testName}
                         </p>
@@ -513,7 +508,7 @@ function BreakdownField({ label, value }: { label: string; value: string }) {
 
 function BannerFact({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-md border border-white/[0.08] bg-black/20 px-3 py-2">
+        <div className="rounded-md border border-border bg-background px-3 py-2">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
             <p className="mt-1 text-sm font-bold text-foreground">{value}</p>
         </div>
@@ -532,40 +527,37 @@ function FactRow({ label, value }: { label: string; value: string }) {
 function getDecisionStyles(status: DecisionStatus) {
     if (status === "BLOCKED") {
         return {
-            panel: "border-red-500/45 bg-red-500/10",
-            icon: "border-red-500/50 bg-red-500/10 text-red-300",
-            text: "text-red-300",
+            panel: "border-border border-l-red-500",
+            icon: "text-red-500",
         };
     }
     if (status === "CONDITIONALLY ALLOWED") {
         return {
-            panel: "border-yellow-500/45 bg-yellow-500/10",
-            icon: "border-yellow-500/50 bg-yellow-500/10 text-yellow-200",
-            text: "text-yellow-200",
+            panel: "border-border border-l-amber-500",
+            icon: "text-amber-500",
         };
     }
     return {
-        panel: "border-green-500/40 bg-green-500/10",
-        icon: "border-green-500/45 bg-green-500/10 text-green-300",
-        text: "text-green-300",
+        panel: "border-border border-l-green-500",
+        icon: "text-green-500",
     };
 }
 
 function getStatusStyles(status: ValidationStatus) {
     if (status === "FAIL") {
         return {
-            panel: "border-red-500/35 bg-red-500/10",
-            text: "text-red-300",
+            panel: "border-border border-l-red-500",
+            icon: "text-red-500",
         };
     }
     if (status === "WARNING") {
         return {
-            panel: "border-yellow-500/35 bg-yellow-500/10",
-            text: "text-yellow-200",
+            panel: "border-border border-l-amber-500",
+            icon: "text-amber-500",
         };
     }
     return {
-        panel: "border-green-500/30 bg-green-500/10",
-        text: "text-green-300",
+        panel: "border-border border-l-green-500",
+        icon: "text-green-500",
     };
 }

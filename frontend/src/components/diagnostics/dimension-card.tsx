@@ -11,26 +11,34 @@ interface DimensionCardProps {
 
 const STATUS_STYLES: Record<ValidationStatus, {
     label: string;
-    row: string;
     badge: string;
+    accent: string;
+    iconClass: string;
+    title: string;
     icon: typeof CheckCircle2;
 }> = {
     PASS: {
         label: "PASS",
-        row: "border-green-500/20 bg-green-500/5",
-        badge: "border-green-500 bg-green-500/10 text-green-300",
+        badge: "border-border text-foreground",
+        accent: "border-l-border",
+        iconClass: "text-green-500",
+        title: "font-medium",
         icon: CheckCircle2,
     },
     FAIL: {
         label: "FAIL",
-        row: "border-red-500/35 bg-red-500/10",
-        badge: "border-red-500 bg-red-500/10 text-red-300",
+        badge: "border-red-500 text-red-500",
+        accent: "border-l-red-500",
+        iconClass: "text-red-500",
+        title: "font-bold",
         icon: CircleSlash,
     },
     WARNING: {
         label: "WARNING",
-        row: "border-yellow-500/35 bg-yellow-500/10",
-        badge: "border-yellow-500 bg-yellow-500/10 text-yellow-200",
+        badge: "border-amber-500 text-amber-500",
+        accent: "border-l-amber-500",
+        iconClass: "text-amber-500",
+        title: "font-semibold",
         icon: AlertTriangle,
     },
 };
@@ -56,7 +64,7 @@ function StatusBadge({ status }: { status: ValidationStatus }) {
                 styles.badge,
             )}
         >
-            <Icon className="size-3" />
+            <Icon className={clsx("size-3", styles.iconClass)} />
             {styles.label}
         </span>
     );
@@ -64,10 +72,8 @@ function StatusBadge({ status }: { status: ValidationStatus }) {
 
 function ImpactBadge({ impact }: { impact: ValidationCheck["impact"] }) {
     const className = impact === "BLOCKER"
-        ? "border-red-500/60 text-red-300"
-        : impact === "DEGRADING"
-            ? "border-yellow-500/60 text-yellow-200"
-            : "border-green-500/50 text-green-300";
+        ? "border-border text-foreground"
+        : "border-border text-muted-foreground";
 
     return (
         <span className={clsx("inline-flex w-fit rounded-md border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest", className)}>
@@ -77,14 +83,17 @@ function ImpactBadge({ impact }: { impact: ValidationCheck["impact"] }) {
 }
 
 function MobileCheckCard({ check }: { check: ValidationCheck }) {
+    const styles = STATUS_STYLES[check.status];
+    const isPass = check.status === "PASS";
+
     return (
-        <div className={clsx("rounded-lg border p-4", STATUS_STYLES[check.status].row)}>
+        <div className={clsx("rounded-md border border-l-4 border-border bg-card p-4", styles.accent, isPass && "py-3")}>
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                     <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         Test
                     </p>
-                    <h4 className="mt-1 text-sm font-semibold text-foreground">
+                    <h4 className={clsx("mt-1 text-sm text-foreground", styles.title)}>
                         {check.testName}
                     </h4>
                 </div>
@@ -119,14 +128,17 @@ function MobileField({ label, value }: { label: string; value: string }) {
 }
 
 function CheckRow({ check }: { check: ValidationCheck }) {
+    const styles = STATUS_STYLES[check.status];
+
     return (
         <div
             className={clsx(
-                "grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 rounded-lg border px-3 py-3 text-sm",
-                STATUS_STYLES[check.status].row,
+                "grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 rounded-md border border-l-4 border-border bg-card px-3 text-sm",
+                check.status === "PASS" ? "py-2" : "py-3",
+                styles.accent,
             )}
         >
-            <div className="font-semibold text-foreground">{check.testName}</div>
+            <div className={clsx("text-foreground", styles.title)}>{check.testName}</div>
             <StatusBadge status={check.status} />
             <div className="font-mono text-xs text-foreground">{check.observed}</div>
             <div className="font-mono text-xs text-muted-foreground">{check.threshold}</div>
@@ -141,13 +153,15 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
     const failCount = countByStatus(section.checks, "FAIL");
     const warningCount = countByStatus(section.checks, "WARNING");
     const passCount = countByStatus(section.checks, "PASS");
+    const priorityChecks = section.checks.filter((check) => check.status !== "PASS");
+    const passChecks = section.checks.filter((check) => check.status === "PASS");
 
     return (
-        <section className={clsx("rounded-lg border border-white/[0.08] bg-card/60 p-5 backdrop-blur md:p-6", className)}>
+        <section className={clsx("rounded-lg border border-border bg-card p-5 md:p-6", className)}>
             <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="flex gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03]">
-                        <SectionIcon className="size-5 text-primary" />
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                        <SectionIcon className="size-5 text-muted-foreground" />
                     </div>
                     <div>
                         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
@@ -179,16 +193,40 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
                     <span>Impact</span>
                 </div>
                 <div className="space-y-2">
-                    {section.checks.map((check) => (
+                    {(priorityChecks.length > 0 ? priorityChecks : section.checks).map((check) => (
                         <CheckRow key={check.id} check={check} />
                     ))}
                 </div>
+                {priorityChecks.length > 0 && passChecks.length > 0 && (
+                    <details className="mt-3 rounded-md border border-border bg-background">
+                        <summary className="cursor-pointer list-none px-3 py-2 font-mono text-xs text-muted-foreground">
+                            {passChecks.length} passing checks collapsed
+                        </summary>
+                        <div className="space-y-2 border-t border-border p-3">
+                            {passChecks.map((check) => (
+                                <CheckRow key={check.id} check={check} />
+                            ))}
+                        </div>
+                    </details>
+                )}
             </div>
 
             <div className="space-y-3 md:hidden">
-                {section.checks.map((check) => (
+                {(priorityChecks.length > 0 ? priorityChecks : section.checks).map((check) => (
                     <MobileCheckCard key={check.id} check={check} />
                 ))}
+                {priorityChecks.length > 0 && passChecks.length > 0 && (
+                    <details className="rounded-md border border-border bg-background">
+                        <summary className="cursor-pointer list-none px-3 py-2 font-mono text-xs text-muted-foreground">
+                            {passChecks.length} passing checks collapsed
+                        </summary>
+                        <div className="space-y-3 border-t border-border p-3">
+                            {passChecks.map((check) => (
+                                <MobileCheckCard key={check.id} check={check} />
+                            ))}
+                        </div>
+                    </details>
+                )}
             </div>
         </section>
     );
@@ -204,15 +242,15 @@ function Counter({
     tone: "fail" | "warning" | "pass";
 }) {
     const className = tone === "fail"
-        ? "border-red-500/35 bg-red-500/10 text-red-300"
+        ? "border-l-red-500"
         : tone === "warning"
-            ? "border-yellow-500/35 bg-yellow-500/10 text-yellow-200"
-            : "border-green-500/25 bg-green-500/10 text-green-300";
+            ? "border-l-amber-500"
+            : "border-l-border";
 
     return (
-        <div className={clsx("rounded-md border px-3 py-2 text-center", className)}>
+        <div className={clsx("rounded-md border border-l-4 border-border bg-background px-3 py-2 text-center text-foreground", className)}>
             <div className="text-lg font-bold tabular-nums">{value}</div>
-            <div className="mt-0.5 text-[9px] uppercase tracking-widest">{label}</div>
+            <div className="mt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
         </div>
     );
 }
