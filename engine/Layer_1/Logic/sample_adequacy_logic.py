@@ -1,8 +1,3 @@
-import sys
-import os
-
-# Ensure the root directory is on the path so 'engine' can be imported when running standalone
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 import numpy as np
 import logging
@@ -37,18 +32,21 @@ class TestResult:
     dimension: str
     name: str
     label: str
-    reason: str
     risk: float
-    metrics: Optional[Dict] = None
+    metrics: Optional[Dict]
 
 
 @dataclass(frozen=True)
 class OverallResult:
     dimension: str
     status: str
-    reason: str
-    risk: float
-
+    peak_risk : float | None
+    severity_score : float | None
+    composite : float | None
+    critical: List[str]    # names of CRITICAL signals
+    warnings: List[str]    # names of WARNING signals
+    safe: List[str]        # names of SAFE signals
+    errors: List[str]      # names of ERROR signals
 
 # ------------------ SIGNAL ACCESS ------------------
 
@@ -65,7 +63,8 @@ def get_value(signal_map: Dict[str, Structure], name: str):
     s = signal_map[name]
 
     if s.status != "ok":
-        raise ValueError(f"{name} unusable: {s.status}")
+        reason = s.meta.get("reason") or s.meta.get("error") or s.status
+        raise ValueError(f"{name} unusable: {reason}")
 
     return s.value
 
@@ -96,6 +95,7 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 # ------------------ LOGIC FUNCTIONS ------------------
 
 def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["duplicated_ratio"]
     ratio = get_value(signal_map, "duplicated_ratio")
     
     if ratio >= 0.5:
@@ -109,12 +109,16 @@ def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="duplicated_risk",
         label=label,
-        reason=f"Duplicated ratio = {ratio:.3f}",
-        risk=float(ratio),
-        metrics={"ratio": float(ratio)}
+        risk=round(float(ratio), 4),
+        metrics={
+            "total_rows" : signal.meta["total_rows"],
+            "duplicate_rows" : signal.meta["duplicate_rows"],
+            "unique_rows" : signal.meta["unique_rows"]
+        }
     )
 
 def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["effective_sample_size"]
     score = get_value(signal_map, "effective_sample_size")
     risk = float(np.exp(-score))
     
@@ -129,12 +133,17 @@ def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="effective_sample_size_risk",
         label=label,
-        reason=f"NN distance = {score:.3f}",
-        risk=risk,
-        metrics={"nn_distance": float(score)}
+        risk=round(risk, 4),
+        metrics={
+            "avg_nn_distance": signal.meta["avg_nn_distance"],
+            "sample_size_used": signal.meta["sample_size_used"],
+            "total_rows": signal.meta["total_rows"],
+            "feature_count": signal.meta["feature_count"]
+        }
     )
 
 def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["sample_dependency_score"]
     score = get_value(signal_map, "sample_dependency_score")
     risk = float(np.exp(-score))
     
@@ -149,13 +158,17 @@ def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="sample_dependency_risk",
         label=label,
-        reason=f"Dependency score = {score:.3f}",
-        risk=risk,
-        metrics={"step_distance": float(score)}
+        risk=round(risk, 4),
+        metrics={
+            "avg_step_distance": signal.meta["avg_step_distance"],
+            "total_rows": signal.meta["total_rows"],
+            "feature_count": signal.meta["feature_count"]
+        }
     )
 
 
 def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["feature_variance_score"]
     ratio = get_value(signal_map, "feature_variance_score")
     risk = float(ratio)
     
@@ -170,12 +183,18 @@ def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="feature_variance_risk",
         label=label,
-        reason=f"Low variance ratio = {ratio:.3f}",
-        risk=risk,
-        metrics={"low_variance_ratio": risk}
+        risk=round(risk, 4),
+        metrics={
+            "low_variance_ratio": signal.meta["low_variance_ratio"],
+            "low_variance_columns": signal.meta["low_variance_columns"],
+            "low_variance_count": signal.meta["low_variance_count"],
+            "total_features": signal.meta["total_features"],
+            "threshold_used": signal.meta["threshold_used"]
+        }
     )
 
 def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["marginal_coverage"]
     coverage = get_value(signal_map, "marginal_coverage")
     risk = float(1.0 - coverage)
     
@@ -190,12 +209,17 @@ def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="marginal_coverage_risk",
         label=label,
-        reason=f"Marginal coverage = {coverage:.3f}",
-        risk=risk,
-        metrics={"coverage": float(coverage)}
+        risk=round(risk, 4),
+        metrics={
+            "avg_bin_coverage": signal.meta["avg_bin_coverage"],
+            "per_column_coverage": signal.meta["per_column_coverage"],
+            "bins_used": signal.meta["bins_used"],
+            "columns_evaluated": signal.meta["columns_evaluated"]
+        }
     )
 
 def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+    signal = signal_map["joint_coverage"]
     coverage = get_value(signal_map, "joint_coverage")
     risk = float(1.0 - coverage)
     
@@ -210,9 +234,14 @@ def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="joint_coverage_risk",
         label=label,
-        reason=f"Joint coverage = {coverage:.3f}",
-        risk=risk,
-        metrics={"coverage": float(coverage)}
+        risk=round(risk, 4),
+        metrics={
+            "grid_fill": signal.meta["grid_fill"],
+            "columns_used": signal.meta["columns_used"],
+            "bins_used": signal.meta["bins_used"],
+            "filled_cells": signal.meta["filled_cells"],
+            "total_cells": signal.meta["total_cells"]
+        }
     )
 
 # ------------------ REGISTRY ------------------
@@ -228,36 +257,92 @@ LOGIC_REGISTRY = [
 
 # ------------------ AGGREGATION ------------------
 
+LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
+
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
-    risks = [r.risk for r in results if r.label != "ERROR"]
+    valid = [r for r in results if r.label in LABEL_SCORE]
+    errors = [r.name for r in results if r.label not in LABEL_SCORE]
 
-    if not risks:
-        return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
+    if not valid:
+        return OverallResult(
+            dimension=DIMENSION,
+            status="REVIEW",
+            peak_risk=None,
+            severity_score=None,
+            composite=None,
+            critical=[],
+            warnings=[],
+            safe=[],
+            errors=errors
+        )
 
-    total_risk = 1 - np.prod([1 - r for r in risks])
+    criticals = [r.name for r in valid if r.label == "CRITICAL"]
+    warnings = [r.name for r in valid if r.label == "WARNING"]
+    safe = [r.name for r in valid if r.label == "SAFE"]
 
-    if total_risk >= 0.7:
+    if criticals:
         status = "STOP"
-    elif total_risk >= 0.3:
+    elif warnings:
         status = "REVIEW"
     else:
         status = "PROCEED"
 
+    # worst case — drives the status decision
+    peak_risk = round(max(r.risk for r in valid), 4)
+    
+    # breadth — what fraction of signals are problematic
+    severity_score = round(sum(LABEL_SCORE[r.label] for r in valid) / len(valid), 4)
+    
+    # combined — peak tells you how bad the worst is,
+    # severity tells you how widespread it is
+    composite = round((0.6 * peak_risk + 0.4 * severity_score) , 4)
+    
     return OverallResult(
-        DIMENSION,
-        status,
-        f"Aggregated risk={total_risk:.3f}",
-        total_risk
+        dimension=DIMENSION,
+        status=status,
+        peak_risk=peak_risk,
+        severity_score=severity_score,
+        composite=composite,
+        critical=criticals,
+        warnings=warnings,
+        safe=safe,
+        errors=errors
     )
 
 # ------------------ ORCHESTRATOR ------------------
 
 def run_sample_adequacy(signals: List[Structure]):
-
+    
+    
+    # 1. build signals map
     signal_map = build_signal_map(signals)
 
-    validate_signals_contract(signal_map)
+    # 2. verify status of signals and allow only valid signals
+    if "data_validation" in signal_map and signal_map["data_validation"].status == "error":
+        err_res = TestResult(
+            dimension=DIMENSION,
+            name="data_validation",
+            label="ERROR",
+            risk=1.0,
+            metrics=signal_map["data_validation"].meta
+        )
+        return [err_res], aggregate_risk([err_res])
 
+    # 3. validate signal contract 
+    try:
+        validate_signals_contract(signal_map)
+    except (ValueError, TypeError) as e:
+        err_res = TestResult(
+            dimension=DIMENSION,
+            name="contract_validation",
+            label="ERROR",
+            risk=1.0,
+            metrics={"error": str(e)}
+        )
+        return [err_res], aggregate_risk([err_res])
+
+    # 4. run a loop on registry, for each func pass the signal_map,
+    # if the signal don't have required valid data (like value), just store this in exception and the error
     results = []
 
     for fn in LOGIC_REGISTRY:
@@ -266,14 +351,15 @@ def run_sample_adequacy(signals: List[Structure]):
         except Exception as e:
             results.append(
                 TestResult(
-                    DIMENSION,
-                    fn.__name__,
-                    "ERROR",
-                    str(e),
-                    1.0
+                    dimension=DIMENSION,
+                    name=fn.__name__,
+                    label="ERROR",
+                    risk=1.0,
+                    metrics={"error": str(e)}
                 )
             )
-
+            
+    # 5. pass the results list to aggregator 
     overall = aggregate_risk(results)
 
     return results, overall

@@ -1,9 +1,3 @@
-import sys
-import os
-
-# Ensure the root directory is on the path so 'engine' can be imported when running standalone
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
-
 import numpy as np
 import logging
 from dataclasses import dataclass
@@ -38,17 +32,21 @@ class TestResult:
     dimension: str
     name: str
     label: str
-    reason: str
     risk: float
-    metrics: Optional[Dict] = None
+    metrics: Optional[Dict]
 
 
 @dataclass(frozen=True)
 class OverallResult:
     dimension: str
     status: str
-    reason: str
-    risk: float
+    peak_risk : float | None
+    severity_score : float | None
+    composite : float | None
+    critical: List[str]    # names of CRITICAL signals
+    warnings: List[str]    # names of WARNING signals
+    safe: List[str]        # names of SAFE signals
+    errors: List[str]      # names of ERROR signals
 
 
 # ------------------ SIGNAL ACCESS LAYER ------------------
@@ -103,11 +101,14 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 
 
 def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    missing_ratio = get_value(signal_map, "target_missing_ratio")
+    signal = signal_map["target_missing_ratio"]
+    ratio = signal.value
+    samples = signal.meta["n_samples"]
+    missing_count = int(ratio * samples)
 
-    if missing_ratio >= 0.4:
+    if ratio >= 0.4:
         label = "CRITICAL"
-    elif missing_ratio > 0.1:
+    elif ratio > 0.1:
         label = "WARNING"
     else:
         label = "SAFE"
@@ -116,14 +117,19 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="missing_risk",
         label=label,
-        reason=f"Missing ratio = {missing_ratio}",
-        risk=missing_ratio,
-        metrics=None
+        risk=round(ratio, 4),
+        metrics={
+            "missing_ratio": round(ratio, 4),
+            "total_samples": samples,
+            "missing_count": missing_count
+        }
     )
 
 
 def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    flag = get_value(signal_map, "target_degeneracy_flag")
+    signal = signal_map["target_degeneracy_flag"]
+    flag = signal.value
+    value_count = signal.meta["unique_values"]
 
     if flag is True:
         label = "CRITICAL"
@@ -134,14 +140,17 @@ def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="target_degeneracy_risk",
         label=label,
-        reason=f"Degeneracy flag: {flag}",
         risk=float(flag),
-        metrics=None
+        metrics={
+            "is_degenerate": flag,
+            "unique_value" : value_count
+        }
     )
 
 
 def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    ratio = get_value(signal_map, "dominant_class_ratio")
+    signal = signal_map["dominant_class_ratio"]
+    ratio = signal.value
 
     if ratio > 0.95:
         label = "CRITICAL"
@@ -154,9 +163,13 @@ def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="dominance_class_risk",
         label=label,
-        reason=f"dominance ratio: {ratio}",
-        risk=ratio,
-        metrics=None
+        risk=round(ratio, 4),
+        metrics={
+            "dominant_class": signal.meta["dominant_class"],
+            "dominant_ratio": ratio,
+            "dominant_count": signal.meta["dominant_count"],
+            "class_distribution": signal.meta["class_distribution"]
+        }
     )
 
 
@@ -183,23 +196,20 @@ def target_entropy_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="target_entropy_risk",
         label=label,
-        reason=(
-            f"target entropy: {entropy:.4f}, "
-            f"normalized: {normalized_entropy:.4f}, "
-            f"classes: {num_classes}"
-        ),
-        risk=1 - normalized_entropy,
+        risk=round((1 - normalized_entropy) , 4),
         metrics={
-            "entropy": entropy,
-            "normalized_entropy": normalized_entropy,
+            "raw_entropy": round(entropy, 4),
+            "normalized_entropy": round(normalized_entropy, 4),
             "num_classes": num_classes,
-        },
+            "max_possible_entropy": signal.meta["max_entropy"]
+        }
     )
 
 
 def type_contamination_risk(signal_map: Dict[str, Structure]) -> TestResult:
-    ratio = get_value(signal_map, "type_contamination_ratio")
-
+    signal = signal_map["type_contamination_ratio"]
+    ratio = signal.value
+    
     if ratio > 0.1:
         label = "CRITICAL"
     elif ratio > 0.05:
@@ -211,9 +221,13 @@ def type_contamination_risk(signal_map: Dict[str, Structure]) -> TestResult:
         dimension=DIMENSION,
         name="type_contamination_risk",
         label=label,
-        reason=f"type_contamination ratio: {ratio}",
-        risk=ratio,
-        metrics=None,
+        risk=round(ratio, 4),
+        metrics={
+            "contamination_ratio": round(ratio, 4),
+            "contaminated_count": signal.meta["contaminated_count"],
+            "major_type": signal.meta["major_type"],
+            "type_breakdown": signal.meta["type_breakdown"]
+        }
     )
 
 
@@ -232,33 +246,58 @@ LOGIC_REGISTRY = [
 # ------------------ AGGREGATION ------------------
 
 
-LABEL_WEIGHTS = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0, "ERROR": 1.0}
+LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
 
 
-def aggregate_risk(results):
-    valid = [r for r in results if r.label in LABEL_WEIGHTS]
+def aggregate_risk(results: List[TestResult]) -> OverallResult:
+    valid = [r for r in results if r.label in LABEL_SCORE]
+    errors = [r.name for r in results if r.label not in LABEL_SCORE]
+    
 
     if not valid:
-        return OverallResult(DIMENSION, "REVIEW", "No valid signals", 1.0)
+        return OverallResult(
+            dimension=DIMENSION,
+            status="REVIEW",
+            peak_risk=None,
+            severity_score=None,
+            composite=None,
+            critical=[],
+            warnings=[],
+            safe=[],
+            errors=errors
+        )
 
-    weighted = 0
+    criticals = [r.name for r in valid if r.label == "CRITICAL"]
+    warnings = [r.name for r in valid if r.label == "WARNING"]
+    safe = [r.name for r in valid if r.label == "SAFE"]
 
-    # severity-weighted average
-    weighted = sum(LABEL_WEIGHTS[r.label] * r.risk for r in valid)
-    print(weighted)
-    total = sum(LABEL_WEIGHTS[r.label] for r in valid)
-    score = weighted / total if total > 0 else 0.0
-
-    # label still driven by worst case
-    if any(r.label == "CRITICAL" for r in valid):
+    if criticals:
         status = "STOP"
-    elif any(r.label == "WARNING" for r in valid):
+    elif warnings:
         status = "REVIEW"
     else:
         status = "PROCEED"
 
+    # worst case — drives the status decision
+    peak_risk = round(max(r.risk for r in valid), 4)
+    
+    # breadth — what fraction of signals are problematic
+    severity_score = round(sum(LABEL_SCORE[r.label] for r in valid) / len(valid), 4)
+    
+    # combined — peak tells you how bad the worst is,
+    # severity tells you how widespread it is
+    composite = round((0.6 * peak_risk + 0.4 * severity_score) , 4)
+    
     return OverallResult(
-        dimension=DIMENSION, status=status, reason=f"score={score:.3f}", risk=score
+        dimension=DIMENSION,
+        status=status,
+        peak_risk=peak_risk,
+        severity_score=severity_score,
+        composite=composite,
+        critical=criticals,
+        warnings=warnings,
+        safe=safe,
+        errors=errors
     )
 
 
@@ -267,10 +306,35 @@ def aggregate_risk(results):
 
 def run_target_viability(signals: List[Structure]):
 
+    # 1. build signals map
     signal_map = build_signal_map(signals)
 
-    validate_signals_contract(signal_map)
+    # 2. verify status of signals 
+    if "data_validation" in signal_map and signal_map["data_validation"].status == "error":
+        err_res = TestResult(
+            dimension=DIMENSION,
+            name="data_validation",
+            label="ERROR",
+            risk=1.0,
+            metrics=signal_map["data_validation"].meta
+        )
+        return [err_res], aggregate_risk([err_res]), signal_map
 
+    # 3. validate signal contract 
+    try:
+        validate_signals_contract(signal_map)
+    except (ValueError, TypeError) as e:
+        err_res = TestResult(
+            dimension=DIMENSION,
+            name="contract_validation",
+            label="ERROR",
+            risk=1.0,
+            metrics={"error": str(e)}
+        )
+        return [err_res], aggregate_risk([err_res]), signal_map
+
+    # 4. run a loop on registry, for each func pass the signal_map,
+    # if the signal don't have required valid data (like value), just store this in exception and the error
     results = []
 
     for fn in LOGIC_REGISTRY:
@@ -282,64 +346,30 @@ def run_target_viability(signals: List[Structure]):
                     dimension=DIMENSION,
                     name=fn.__name__,
                     label="ERROR",
-                    reason=str(e),
                     risk=1.0,
+                    metrics={"error": str(e)}
                 )
             )
 
+    # 5. pass the results list to aggregator 
     overall = aggregate_risk(results)
 
-    return results, overall
+    return results, overall, signal_map  # ^ the formatter will extract the target name 
 
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(
-            dimension="target_viability",
-            name="target_missing_ratio",
-            value=0.0,
-            status="ok",
-            meta={"n_samples": 891},
-        ),
-        Structure(
-            dimension="target_viability",
-            name="target_degeneracy_flag",
-            value=False,
-            status="ok",
-            meta={"unique_values": 2},
-        ),
-        Structure(
-            dimension="target_viability",
-            name="dominant_class_ratio",
-            value=0.6161616161616161,
-            status="ok",
-            meta={"n_samples": 891},
-        ),
-        Structure(
-            dimension="target_viability",
-            name="target_entropy",
-            value=0.9607078989902569,
-            status="ok",
-            meta={"num_classes": 2},
-        ),
-        Structure(
-            dimension="target_viability",
-            name="type_contamination_ratio",
-            value=0.0,
-            status="ok",
-            meta={"major_type": "<class 'str'>"},
-        ),
-        Structure(
-            dimension="target_viability",
-            name="dataset_shape",
-            value={"rows": 891, "cols": 1},
-            status="ok",
-            meta={"n_samples": 891},
-        ),
+        Structure(dimension='target_viability', name='target_column_name', value='Survived', status='ok', meta={'dtype': 'int64'}),
+        Structure(dimension='target_viability', name='target_shape', value={'rows': 891, 'cols': 1}, status='ok', meta={'n_samples': 891}),
+        Structure(dimension='target_viability', name='target_missing_ratio', value=0.0, status='ok', meta={'n_samples': 891, 'missing_count': 0}),
+        Structure(dimension='target_viability', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 2}),
+        Structure(dimension='target_viability', name='dominant_class_ratio', value=0.6161616161616161, status='ok', meta={'n_samples': 891, 'dominant_class': '1', 'dominant_count': 549, 'class_distribution': {'1': 0.6162, '0': 0.3838}}),
+        Structure(dimension='target_viability', name='target_entropy', value=0.9607078989902569, status='ok', meta={'num_classes': 2, 'max_entropy': 1.0}),
+        Structure(dimension='target_viability', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'int', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'int': 891}})
     ]
 
-    results, overall = run_target_viability(mock_signals)
+    results, overall, mock_signals = run_target_viability(mock_signals)
 
     for r in results:
         print(r)
-        print(overall)
+    print(overall)

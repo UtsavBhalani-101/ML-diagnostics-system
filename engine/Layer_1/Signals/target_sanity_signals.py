@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
 
 FAILURE_MODES = {
     "existence" : "target not present --> _____ (missing)",
@@ -24,7 +24,7 @@ class Structure:
     name: str
     value: Any
     status: str  # "ok", "no_value", "error"
-    meta: Optional[Dict] = None
+    meta: Dict[str, Any]
 
 
 DIMENSION = "target_viability"
@@ -87,15 +87,28 @@ def validate_target(y: pd.Series) -> Dict:
 
 # ------------------ SIGNALS ------------------
 
+def target_shape(y: pd.Series) -> Structure:
+    signal = Structure(
+        dimension=DIMENSION,
+        name="target_shape",
+        value={"rows": len(y), "cols": 1},
+        status="ok",
+        meta={"n_samples": len(y)}
+    )
+
+    enforce(signal)
+    return signal
+
+
 def target_missing_ratio(y: pd.Series) -> Structure:
     ratio = float(y.isna().mean())
 
     signal = Structure(
-            DIMENSION,
-            "target_missing_ratio",
-            ratio,
-            "ok",
-            {"n_samples": len(y)}
+            dimension=DIMENSION,
+            name="target_missing_ratio",
+            value=ratio,
+            status="ok",
+            meta={"n_samples": len(y), "missing_count": int(y.isna().sum())}
         )
 
     enforce(signal)
@@ -106,11 +119,11 @@ def target_degeneracy_flag(y: pd.Series) -> Structure:
     is_degenerate = unique <= 1
 
     signal = Structure(
-            DIMENSION,
-            "target_degeneracy_flag",
-            is_degenerate,
-            "ok",
-            {"unique_values": unique}
+            dimension=DIMENSION,
+            name="target_degeneracy_flag",
+            value=is_degenerate,
+            status="ok",
+            meta={"unique_values": unique}
         )
     
     enforce(signal)
@@ -118,36 +131,58 @@ def target_degeneracy_flag(y: pd.Series) -> Structure:
 
 
 def dominant_class_ratio(y: pd.Series) -> Structure:
+    counts = y.value_counts(normalize=True)
+    
     if y.dropna().empty:
-        return Structure(DIMENSION, "dominant_class_ratio", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="dominant_class_ratio",
+            value=None,
+            status="no_value",
+            meta={
+                "n_samples": len(y),
+                "dominant_class": str(counts.index[0]),
+                "dominant_count": int(y.value_counts().iloc[0]),
+                "class_distribution": {str(k): round(float(v), 4) for k, v in counts.items()}
+            }
+        )
 
     ratio = float(y.value_counts(normalize=True).iloc[0])
 
-    signal =  Structure(
-            DIMENSION,
-            "dominant_class_ratio",
-            ratio,
-            "ok",
-            {"n_samples": len(y)}
-        )
+    signal = Structure(
+        dimension=DIMENSION,
+        name="dominant_class_ratio",
+        value=ratio,
+        status="ok",
+        meta={"n_samples": len(y)}
+    )
 
     enforce(signal)
     return signal
 
 def target_entropy(y: pd.Series) -> Structure:
     if y.dropna().empty:
-        return Structure(DIMENSION, "target_entropy", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="target_entropy",
+            value=None,
+            status="no_value",
+            meta={"reason": "empty target"}
+        )
 
     p = y.value_counts(normalize=True)
     entropy = float(-np.sum(p * np.log2(p + 1e-9)))
 
-    signal =  Structure(
-            DIMENSION,
-            "target_entropy",
-            entropy,
-            "ok",
-            {"num_classes": len(p)}
-        )
+    signal = Structure(
+        dimension=DIMENSION,
+        name="target_entropy",
+        value=entropy,
+        status="ok",
+        meta={
+            "num_classes": len(p),
+            "max_entropy": round(float(np.log2(len(p))), 4) if len(p) > 1 else 0.0
+        }
+    )
 
     enforce(signal)
     return signal
@@ -156,61 +191,64 @@ def type_contamination_ratio(y: pd.Series) -> Structure:
     non_null = y.dropna()
 
     if len(non_null) == 0:
-        return Structure(DIMENSION, "type_contamination_ratio", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="type_contamination_ratio",
+            value=None,
+            status="no_value",
+            meta={"reason": "empty target"}
+        )
 
-    types = non_null.map(type)
+    types = non_null.map(lambda x: type(x).__name__)
     majority_type = types.value_counts().idxmax()
 
     contamination = float((types != majority_type).mean())
+    
+    type_counts = types.value_counts()
 
-    signal =  Structure(
-            DIMENSION,
-            "type_contamination_ratio",
-            contamination,
-            "ok",
-            {"major_type": str(majority_type)}
-        )
-
-    enforce(signal)
-    return signal
-
-def dataset_shape(y: pd.Series) -> Structure:
     signal = Structure(
         dimension=DIMENSION,
-        name="dataset_shape",
-        value={"rows": len(y), "cols": 1},
+        name="type_contamination_ratio",
+        value=contamination,
         status="ok",
-        meta={"n_samples": len(y)}
+        meta={
+        "major_type": majority_type,
+        "contaminated_count": int((types != majority_type).sum()),
+        "total_non_null": len(non_null),
+        "type_breakdown": {k: int(v) for k, v in type_counts.items()}
+        }
     )
 
     enforce(signal)
     return signal
 
 
+
+
 # ------------------ REGISTRY ------------------
 
 SIGNALS_REGISTRY = [
+    target_shape,
     target_missing_ratio,        # existence
     target_degeneracy_flag,      # informativeness (hard fail)
     dominant_class_ratio,        # informativeness (soft fail)
     target_entropy,              # consistency proxy
     type_contamination_ratio,     # consistency (representation)
-    dataset_shape
 ]
 
 REQUIRED_SIGNALS = {
+    "target_shape" : dict,
     "target_missing_ratio": float,
     "target_degeneracy_flag": bool,
     "dominant_class_ratio": float,
     "target_entropy": (float, type(None)),
     "type_contamination_ratio": (float, type(None)),
-    "dataset_shape" : dict
 }
 
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_target_sanity(y: pd.Series) -> List[Structure]:
+def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
 
     y_clean = clean_target(y)
     validation = validate_target(y_clean)
@@ -225,8 +263,19 @@ def run_target_sanity(y: pd.Series) -> List[Structure]:
                 meta={"reason": validation["reason"]}
             )
         ]
+        
+    # target col name before running the registry loop
+    name_signal = Structure(
+        dimension=DIMENSION,
+        name="target_column_name",
+        value=col_name,
+        status="ok",
+        meta={"dtype": str(y.dtype)}
+    )
 
-    results = []
+    results = [name_signal]
+    
+    # registry loop to run all signals
 
     for signal_fn in SIGNALS_REGISTRY:
         try:
@@ -253,7 +302,6 @@ def run_target_sanity(y: pd.Series) -> List[Structure]:
     return results
 
 if __name__ == "__main__":
-    # Example target column
     # example_target_col = pd.Series([1, 0, 1, 1, "NA", np.nan, 0, 1, 1, 0, 0, 1, "", " ", None])
     example_target_col = pd.Series(["NY", "LA", "SF", "NY", "LA", "None", "  ", "NY", "LA", "SF", "NY", "LA", "np.nan"])
     # example_target_col = pd.Series([])
@@ -262,7 +310,7 @@ if __name__ == "__main__":
     target_col = df['Survived']
 
     print("--- Running Target Signals ---")
-    results = run_target_sanity(target_col)
+    results = run_target_sanity(target_col, 'Survived')
     
     for res in results:
         # print(f"{res.name}:")

@@ -15,7 +15,7 @@ FAILURE_MODES = [
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# ------------------ STRUCTURE ------------------
+#^ ------------------ STRUCTURE ------------------
 
 @dataclass(frozen=True)
 class Structure:
@@ -27,7 +27,7 @@ class Structure:
 
 DIMENSION = "sample_adequacy"
 
-# ------------------ ENFORCEMENT ------------------
+#^ ------------------ ENFORCEMENT ------------------
 
 def enforce(signal: Structure):
     if signal.status == "ok" and signal.value is None:
@@ -36,7 +36,7 @@ def enforce(signal: Structure):
     if signal.status in ("no_value", "error") and signal.value is not None:
         raise ValueError(f"{signal.name}: invalid state mismatch")
 
-# ------------------ VALIDATION ------------------
+#^ ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
     if df is None or df.shape[0] == 0:
@@ -47,7 +47,7 @@ def validate_data(df: pd.DataFrame):
 
     return {"status": "pass"}
 
-# ------------------ HELPERS ------------------
+#^ ------------------ HELPERS ------------------
 
 def _feature_matrix(df, cardinality_threshold=20):
     
@@ -89,7 +89,7 @@ def _nan_safe_distance(diff):
 
     return np.sqrt(np.nansum(diff ** 2, axis=1) / valid_dims)
 
-# ------------------ FAILURE MODE A ------------------
+#^ ------------------ FAILURE MODE A ------------------
 
 def duplicated_ratio(df: pd.DataFrame) -> Structure:
     df_copy = df.fillna("__MISSING__")
@@ -98,11 +98,15 @@ def duplicated_ratio(df: pd.DataFrame) -> Structure:
     ratio = 1 - (unique_rows / total_rows)
 
     signal = Structure(
-        DIMENSION,
-        "duplicated_ratio",
-        float(ratio),
-        "ok",
-        {"n": total_rows}
+        dimension=DIMENSION,
+        name="duplicated_ratio",
+        value=float(ratio),
+        status="ok",
+        meta={
+            "total_rows": total_rows,
+            "duplicate_rows": int(total_rows - unique_rows),
+            "unique_rows": int(unique_rows)
+        }
     )
     enforce(signal)
     return signal
@@ -115,8 +119,14 @@ def effective_sample_size(df: pd.DataFrame) -> Structure:
     """
     X = _feature_matrix(df)
 
-    if X.shape[0] < 2 or X.shape[1] == 0:
-        return Structure(DIMENSION, "effective_sample_size", None, "no_value")
+    if X.shape[0] < 2:
+        return Structure(
+            dimension=DIMENSION,
+            name="effective_sample_size",
+            value=None,
+            status="no_value",
+            meta={"reason" : "insufficient samples"}
+        )
 
     # sample subset for efficiency
     sample = X.sample(min(500, len(X)), random_state=42)
@@ -136,11 +146,16 @@ def effective_sample_size(df: pd.DataFrame) -> Structure:
     score = float(avg_nn_dist)
 
     signal = Structure(
-        DIMENSION,
-        "effective_sample_size",
-        score,
-        "ok",
-        {"avg_nn_distance": score}
+        dimension=DIMENSION,
+        name="effective_sample_size",
+        value=score,
+        status="ok",
+        meta={
+            "avg_nn_distance": score,
+            "sample_size_used": min(500, len(X)),
+            "total_rows": len(df),
+            "feature_count": X.shape[1]
+        }
     )
     enforce(signal)
     return signal
@@ -153,7 +168,13 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
     X = _feature_matrix(df)
 
     if X.shape[0] < 2:
-        return Structure(DIMENSION, "sample_dependency_score", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="sample_dependency_score",
+            value=None,
+            status="no_value",
+            meta={"reason": "insufficient samples"}
+        )
 
     arr = X.values
     diff = arr[1:] - arr[:-1]
@@ -162,35 +183,45 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
     score = float(np.mean(dist))
 
     signal = Structure(
-        DIMENSION,
-        "sample_dependency_score",
-        score,
-        "ok",
-        {"avg_step_distance": score}
+        dimension=DIMENSION,
+        name="sample_dependency_score",
+        value=score,
+        status="ok",
+        meta={
+            "avg_step_distance": score,
+            "total_rows": len(df),
+            "feature_count": X.shape[1]
+        }
     )
     enforce(signal)
     return signal
 
 
 
-# ------------------ FAILURE MODE B ------------------
+#^ ------------------ FAILURE MODE B ------------------
 
 def feature_variance_score(df: pd.DataFrame) -> Structure:
     X = _feature_matrix(df)
 
-    if X.shape[1] == 0:
-        return Structure(DIMENSION, "feature_variance_score", None, "no_value")
 
     variances = X.var(skipna=True)
     threshold = np.nanmedian(variances) * 1e-3 if len(variances) > 0 else 0
     low_var_ratio = float((variances < threshold).mean())
+    low_var_cols = list(variances[variances < threshold].index)
 
     signal = Structure(
-        DIMENSION,
-        "feature_variance_score",
-        low_var_ratio,
-        "ok",
-        {"low_variance_ratio": low_var_ratio}
+        dimension=DIMENSION,
+        name="feature_variance_score",
+        value=low_var_ratio,
+        status="ok",
+        meta={
+            "low_variance_ratio": low_var_ratio,
+            "low_variance_columns": low_var_cols,
+            "low_variance_count": len(low_var_cols),
+            "total_features": len(variances),
+            "threshold_used": float(threshold)
+        }
+
     )
     enforce(signal)
     return signal
@@ -198,9 +229,6 @@ def feature_variance_score(df: pd.DataFrame) -> Structure:
 
 def marginal_coverage(df: pd.DataFrame, bins=10) -> Structure:
     X = _feature_matrix(df)
-
-    if X.shape[1] == 0:
-        return Structure(DIMENSION, "marginal_coverage", None, "no_value")
 
     coverage_scores = []
 
@@ -213,16 +241,37 @@ def marginal_coverage(df: pd.DataFrame, bins=10) -> Structure:
             continue
 
     if not coverage_scores:
-        return Structure(DIMENSION, "marginal_coverage", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="marginal_coverage",
+            value=None,
+            status="no_value",
+            meta={"reason": "failed to compute coverage"}
+        )
 
     score = float(np.mean(coverage_scores))
+    
+    coverage_per_col = {}
+    for col in X.columns:
+        try:
+            binned = pd.qcut(X[col], q=bins, duplicates="drop")
+            coverage_per_col[col] = round(binned.nunique() / bins, 4)
+        except Exception:
+            continue
+
+    score = float(np.mean(list(coverage_per_col.values())))
 
     signal = Structure(
-        DIMENSION,
-        "marginal_coverage",
-        score,
-        "ok",
-        {"avg_bin_coverage": score}
+        dimension=DIMENSION,
+        name="marginal_coverage",
+        value=score,
+        status="ok",
+        meta={
+            "avg_bin_coverage": score,
+            "per_column_coverage": coverage_per_col,
+            "bins_used": bins,
+            "columns_evaluated": len(coverage_per_col)
+        }
     )
     enforce(signal)
     return signal
@@ -235,7 +284,13 @@ def joint_coverage(df: pd.DataFrame, bins=5) -> Structure:
     X = _feature_matrix(df)
 
     if X.shape[1] < 2:
-        return Structure(DIMENSION, "joint_coverage", None, "no_value")
+        return Structure(
+            dimension=DIMENSION,
+            name="joint_coverage",
+            value=None,
+            status="no_value",
+            meta={"reason": "insufficient features"}
+        )
 
     cols = X.var().sort_values(ascending=False).head(2).index
     sub = X[cols]
@@ -250,15 +305,27 @@ def joint_coverage(df: pd.DataFrame, bins=5) -> Structure:
 
         score = float(filled / total)
 
-    except Exception:
-        return Structure(DIMENSION, "joint_coverage", None, "no_value")
+    except Exception as e:
+        return Structure(
+            dimension=DIMENSION,
+            name="joint_coverage",
+            value=None,
+            status="no_value",
+            meta={"reason": f"calculation failed: {str(e)}"}
+        )
 
     signal = Structure(
-        DIMENSION,
-        "joint_coverage",
-        score,
-        "ok",
-        {"grid_fill": score}
+        dimension=DIMENSION,
+        name="joint_coverage",
+        value=score,
+        status="ok",
+        meta={
+            "grid_fill": score,
+            "columns_used": list(cols),
+            "bins_used": bins,
+            "filled_cells": int(filled),
+            "total_cells": total
+        }
     )
     enforce(signal)
     return signal
@@ -292,7 +359,13 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
 
     if validation["status"] == "fail":
         return [
-            Structure(DIMENSION, "data_validation", None, "error", validation)
+            Structure(
+                dimension=DIMENSION,
+                name="data_validation",
+                value=None,
+                status="error",
+                meta=validation
+            )
         ]
 
     results = []
@@ -302,7 +375,13 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
             results.append(fn(df))
         except Exception as e:
             results.append(
-                Structure(DIMENSION, fn.__name__, None, "error", {"error": str(e)})
+                Structure(
+                    dimension=DIMENSION,
+                    name=fn.__name__,
+                    value=None,
+                    status="error",
+                    meta={"error": str(e)}
+                )
             )
 
     return results

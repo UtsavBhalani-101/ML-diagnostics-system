@@ -83,11 +83,11 @@ def dataset_shape(df: pd.DataFrame) -> Structure:
     rows, cols = df.shape
 
     signal = Structure(
-        DIMENSION,
-        "dataset_shape",
-        {"rows": int(rows), "cols": int(cols)},
-        "ok",
-        {"total_cells": int(rows * cols)}
+        dimension=DIMENSION,
+        name="dataset_shape",
+        value={"rows": int(rows), "cols": int(cols)},
+        status="ok",
+        meta={"total_cells": int(rows * cols)}
     )
     enforce(signal)
     return signal
@@ -99,11 +99,11 @@ def global_missing_ratio(df: pd.DataFrame) -> Structure:
     ratio = float(df.isna().sum().sum() / total)
 
     signal = Structure(
-        DIMENSION,
-        "global_missing_ratio",
-        ratio,
-        "ok",
-        {"total_cells": total}
+        dimension=DIMENSION,
+        name="global_missing_ratio",
+        value=ratio,
+        status="ok",
+        meta={"total_cells": total}
     )
     enforce(signal)
     return signal
@@ -115,11 +115,11 @@ def column_missing_ratio(df: pd.DataFrame) -> Structure:
     worst = max(ratios.values())
 
     signal = Structure(
-        DIMENSION,
-        "column_missing_ratio",
-        {"per_column": ratios, "worst_ratio": worst},
-        "ok",
-        {"num_columns": len(ratios)}
+        dimension=DIMENSION,
+        name="column_missing_ratio",
+        value={"per_column": ratios, "worst_ratio": worst},
+        status="ok",
+        meta={"num_columns": len(ratios)}
     )
     enforce(signal)
     return signal
@@ -132,11 +132,11 @@ def duplicated_ratio(df: pd.DataFrame) -> Structure:
     ratio = float(df_copy.duplicated().mean())
     
     signal = Structure(
-        DIMENSION,
-        "duplicated_ratio",
-        ratio,
-        "ok",
-        {"num_rows": len(df)}
+        dimension=DIMENSION,
+        name="duplicated_ratio",
+        value=ratio,
+        status="ok",
+        meta={"num_rows": len(df)}
     )
     enforce(signal)
     return signal
@@ -150,11 +150,11 @@ def constant_columns_ratio(df: pd.DataFrame) -> Structure:
     ratio = float(len(const_cols) / df.shape[1])
 
     signal = Structure(
-        DIMENSION,
-        "constant_columns_ratio",
-        {"columns": list(const_cols), "ratio": ratio},
-        "ok",
-        {"total_columns": df.shape[1]}
+        dimension=DIMENSION,
+        name="constant_columns_ratio",
+        value={"columns": list(const_cols), "ratio": ratio},
+        status="ok",
+        meta={"total_columns": df.shape[1]}
     )
     enforce(signal)
     return signal
@@ -165,11 +165,11 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
 
     if len(obj_cols.columns) == 0:
         return Structure(
-            DIMENSION,
-            "hidden_missing_ratio",
-            None,
-            "no_value",
-            {"reason": "no object columns"}
+            dimension=DIMENSION,
+            name="hidden_missing_ratio",
+            value=None,
+            status="no_value",
+            meta={"reason": "no object columns"}
         )       
     
     worst = 0.0
@@ -182,11 +182,11 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
         worst = max(worst, r)
 
     signal = Structure(
-        DIMENSION,
-        "hidden_missing_ratio",
-        {"ratios": ratios, "worst_ratio": worst},
-        "ok",
-        {"num_object_columns": len(obj_cols.columns)}
+        dimension=DIMENSION,
+        name="hidden_missing_ratio",
+        value={"ratios": ratios, "worst_ratio": worst},
+        status="ok",
+        meta={"num_object_columns": len(obj_cols.columns)}
     )
     
     enforce(signal)
@@ -200,11 +200,11 @@ def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
 
     if len(obj_cols.columns) == 0:
         return Structure(
-            DIMENSION,
-            "mixed_type_columns_ratio",
-            None,
-            "no_value",
-            {"reason": "no object columns"}
+            dimension=DIMENSION,
+            name="mixed_type_columns_ratio",
+            value=None,
+            status="no_value",
+            meta={"reason": "no object columns"}
         )
 
     mixed = []
@@ -221,11 +221,11 @@ def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
     ratio = len(mixed) / len(obj_cols.columns)
 
     signal = Structure(
-        DIMENSION,
-        "mixed_type_columns_ratio",
-        {"columns": mixed, "ratio": ratio},
-        "ok",
-        {"num_object_columns": len(obj_cols.columns)}
+        dimension=DIMENSION,
+        name="mixed_type_columns_ratio",
+        value={"columns": mixed, "ratio": ratio},
+        status="ok",
+        meta={"num_object_columns": len(obj_cols.columns)}
     )
     enforce(signal)
     return signal
@@ -261,8 +261,13 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
 
     if validation["status"] == "fail":
         return [
-            Structure(DIMENSION, "data_validation", None, "error",
-                             {"reason": validation["reason"]})
+            Structure(
+                dimension=DIMENSION,
+                name="data_validation",
+                value=None,
+                status="error",
+                meta={"reason": validation["reason"]}
+            )
         ]
 
     results = []
@@ -272,8 +277,13 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
             results.append(fn(df))
         except Exception as e:
             results.append(
-                Structure(DIMENSION, fn.__name__, None, "error",
-                                 {"error": str(e)})
+                Structure(
+                    dimension=DIMENSION,
+                    name=fn.__name__,
+                    value=None,
+                    status="error",
+                    meta={"error": str(e)}
+                )
             )
 
     return results
