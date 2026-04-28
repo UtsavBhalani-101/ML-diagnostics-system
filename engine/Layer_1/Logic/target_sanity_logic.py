@@ -302,13 +302,13 @@ def run_target_viability(signals: List[Structure]):
     signal_map = build_signal_map(signals)
 
     # 2. verify status of signals 
-    if "data_validation" in signal_map and signal_map["data_validation"].status == "error":
+    if "target_validation" in signal_map and signal_map["target_validation"].status == "error":
         err_res = TestResult(
             dimension=DIMENSION,
-            name="data_validation",
+            name="target_validation",
             label="ERROR",
             risk=1.0,
-            metrics=signal_map["data_validation"].meta
+            metrics=signal_map["target_validation"].meta
         )
         return [err_res], aggregate_risk([err_res]), signal_map
 

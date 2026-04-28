@@ -87,6 +87,15 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
 # MAIN PIPELINE (WITHOUT FILEPATH)
 # -------------------------
 
+def run_pipeline(filepath: str, target_column=None):
+    if filepath.endswith(".parquet"):
+        df = pd.read_parquet(filepath)
+    else:
+        df = pd.read_csv(filepath)
+
+    return run_pipeline_from_df(df, target_column=target_column)
+
+
 def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
     try:
         logger.info("Running signal extraction")

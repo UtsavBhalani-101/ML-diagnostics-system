@@ -11,12 +11,20 @@ async function fetchAPI<T>(
 ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            ...options?.headers,
-        },
-    });
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers: {
+                ...options?.headers,
+            },
+        });
+    } catch (error) {
+        const target = API_BASE_URL || "the current Next.js origin";
+        throw new Error(
+            `Could not reach diagnostics backend at ${target}. Make sure the backend is running and NEXT_PUBLIC_API_URL is correct.`
+        );
+    }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: "Request failed" }));

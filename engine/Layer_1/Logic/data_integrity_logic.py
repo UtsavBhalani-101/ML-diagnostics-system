@@ -181,6 +181,16 @@ def constant_risk(sm: Dict[str, Structure]) -> TestResult:
 
 
 def hidden_missing_risk(sm: Dict[str, Structure]) -> TestResult:
+    signal = sm["hidden_missing_ratio"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="hidden_missing_risk",
+            label="SAFE",
+            risk=0.0,
+            metrics=signal.meta
+        )
+
     data = get_value(sm, "hidden_missing_ratio")
     worst = data["worst_ratio"]
     per_column = data["ratios"]
@@ -208,6 +218,16 @@ def hidden_missing_risk(sm: Dict[str, Structure]) -> TestResult:
 
 
 def mixed_type_risk(sm: Dict[str, Structure]) -> TestResult:
+    signal = sm["mixed_type_columns_ratio"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="mixed_type_risk",
+            label="SAFE",
+            risk=0.0,
+            metrics=signal.meta
+        )
+
     data = get_value(sm, "mixed_type_columns_ratio")
     ratio = data["ratio"]
 
@@ -245,7 +265,7 @@ LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
 
 def aggregate_risk(results: List[TestResult]) -> OverallResult:
     valid = [r for r in results if r.label in LABEL_SCORE]
-    errors = [r for r in results if r.label not in LABEL_SCORE]
+    errors = [r.name for r in results if r.label not in LABEL_SCORE]
     
     if not valid:
         return OverallResult(

@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
 
-from engine.Layer_1.risk_template import worst_status
+from engine.Layer_1.risk_template import STATUS_RANK, worst_status
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,11 @@ def _compute_overall(dimensions: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     )
     top_dimension_name = ranked_dimensions[0][0] if ranked_dimensions else None
     top_dimension_risk = ranked_dimensions[0][1]["risk"] if ranked_dimensions else 0.0
-    failing_dimensions = sum(1 for d in dimensions.values() if d["status"] != "SAFE")
+    failing_dimensions = sum(
+        1
+        for d in dimensions.values()
+        if STATUS_RANK.get(str(d["status"]).upper(), 1) > STATUS_RANK["SAFE"]
+    )
 
     overall = {
         "risk": max(risks) if risks else 0.0,

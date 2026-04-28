@@ -405,6 +405,12 @@ async def run_diagnostics(
     resolved_target = _resolve_target_column(df.columns.tolist(), target_column)
     result = run_pipeline_from_df(df, resolved_target)
 
+    if result.get("status") != "success":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("message", "Diagnostics pipeline failed."),
+        )
+
     # Convert shape tuple to list for strict Pydantic validation
     if "shape" in result and isinstance(result["shape"], tuple):
         result["shape"] = list(result["shape"])
@@ -504,4 +510,3 @@ async def set_target_column(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to validate target column: {exc}") from exc
-

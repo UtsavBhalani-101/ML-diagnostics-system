@@ -61,6 +61,31 @@ def _build_dimension_dict(
     return dimension
 
 
+def _overall_risk(overall) -> float:
+    """Use the new Layer 1 aggregate score, falling back to peak risk for errors."""
+    risk = getattr(overall, "composite", None)
+    if risk is None:
+        risk = getattr(overall, "peak_risk", None)
+    return round(float(risk or 0.0), 4)
+
+
+def _interpretation(dimension_name: str, overall) -> str:
+    status = getattr(overall, "status", "REVIEW")
+    critical = getattr(overall, "critical", []) or []
+    warnings = getattr(overall, "warnings", []) or []
+    errors = getattr(overall, "errors", []) or []
+
+    if errors:
+        return f"{dimension_name} could not be fully evaluated because {', '.join(map(str, errors))} failed."
+    if critical:
+        return f"{dimension_name} has critical structural risk from {', '.join(critical)}."
+    if warnings:
+        return f"{dimension_name} needs review because {', '.join(warnings)} raised warning-level risk."
+    if status == "PROCEED":
+        return f"{dimension_name} checks did not raise material structural risk."
+    return f"{dimension_name} completed with status {status}."
+
+
 def _build_breakdown(results: list) -> tuple:
     dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
     additive = {r.name: r.risk for r in results if 0.0 < r.risk < 0.5 and r.label != "ERROR"}
@@ -82,7 +107,7 @@ def evaluate_data_integrity(structures: list, flat_signals: dict) -> dict:
         k: flat_signals[k] for k in [
             "rows", "cols",
             "global_missing_ratio", "column_missing_ratio",
-            "duplicate_ratio", "constant_columns", "constant_ratio",
+            "duplicated_ratio", "duplicate_ratio", "constant_columns", "constant_ratio",
             "hidden_missing_ratio", "mixed_type_columns", "mixed_ratio"
         ] if k in flat_signals
     }
@@ -95,9 +120,9 @@ def evaluate_data_integrity(structures: list, flat_signals: dict) -> dict:
         dimension_signals=dim_signals,
         dominant_risks=dominant_risks,
         additive_risks=additive_risks,
-        total_risk=overall.risk,
+        total_risk=_overall_risk(overall),
         status=overall.status,
-        interpretation=overall.reason,
+        interpretation=_interpretation("Data integrity", overall),
     )
 
 
@@ -107,6 +132,7 @@ def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
 
     dim_signals = {
         k: flat_signals.get(k) for k in [
+            "target_column_name", "target_rows",
             "target_missing_ratio", "target_degeneracy_flag",
             "dominant_class_ratio", "target_entropy",
             "type_contamination_ratio", "dataset_shape", "task_confidence"
@@ -114,17 +140,27 @@ def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
     }
 
     dim_structs = [s for s in structures if s.dimension == "target_viability"]
+    if not dim_structs:
+        return _build_dimension_dict(
+            dimension_signals=dim_signals,
+            dominant_risks={},
+            additive_risks={},
+            total_risk=0.0,
+            status="PROCEED",
+            interpretation="Target viability checks were skipped because no target column was provided.",
+        )
+
     try:
-        results, overall = run_target_viability(dim_structs)
+        results, overall, _signal_map = run_target_viability(dim_structs)
         dominant_risks, additive_risks = _build_breakdown(results)
 
         return _build_dimension_dict(
             dimension_signals=dim_signals,
             dominant_risks=dominant_risks,
             additive_risks=additive_risks,
-            total_risk=overall.risk,
+            total_risk=_overall_risk(overall),
             status=overall.status,
-            interpretation=overall.reason,
+            interpretation=_interpretation("Target viability", overall),
         )
     except Exception as e:
         logger.warning(f"Target viability evaluation failed: {e}, defaulting to SAFE")
@@ -144,7 +180,7 @@ def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
 
     dim_signals = {
         k: flat_signals.get(k) for k in [
-            "duplicated_ratio", "effective_sample_score",
+            "duplicated_ratio", "effective_sample_size", "effective_sample_score",
             "sample_dependency_score","feature_variance_score", 
             "marginal_coverage", "joint_coverage"
         ] if k in flat_signals
@@ -158,7 +194,7 @@ def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
         dimension_signals=dim_signals,
         dominant_risks=dominant_risks,
         additive_risks=additive_risks,
-        total_risk=overall.risk,
+        total_risk=_overall_risk(overall),
         status=overall.status,
-        interpretation=overall.reason,
+        interpretation=_interpretation("Sample adequacy", overall),
     )

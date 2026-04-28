@@ -110,6 +110,15 @@ def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["effective_sample_size"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="effective_sample_size_risk",
+            label="CRITICAL",
+            risk=1.0,
+            metrics=signal.meta
+        )
+
     score = get_value(signal_map, "effective_sample_size")
     risk = float(np.exp(-score))
     
@@ -135,6 +144,15 @@ def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["sample_dependency_score"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="sample_dependency_risk",
+            label="CRITICAL",
+            risk=1.0,
+            metrics=signal.meta
+        )
+
     score = get_value(signal_map, "sample_dependency_score")
     risk = float(np.exp(-score))
     
@@ -160,6 +178,15 @@ def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["feature_variance_score"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="feature_variance_risk",
+            label="SAFE",
+            risk=0.0,
+            metrics=signal.meta
+        )
+
     ratio = get_value(signal_map, "feature_variance_score")
     risk = float(ratio)
     
@@ -186,6 +213,15 @@ def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["marginal_coverage"]
+    if signal.status == "no_value":
+        return TestResult(
+            dimension=DIMENSION,
+            name="marginal_coverage_risk",
+            label="CRITICAL",
+            risk=1.0,
+            metrics=signal.meta
+        )
+
     coverage = get_value(signal_map, "marginal_coverage")
     risk = float(1.0 - coverage)
     
@@ -211,6 +247,18 @@ def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
 
 def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["joint_coverage"]
+    if signal.status == "no_value":
+        reason = str(signal.meta.get("reason", ""))
+        risk = 0.0 if "insufficient features" in reason else 0.5
+        label = "SAFE" if risk == 0.0 else "WARNING"
+        return TestResult(
+            dimension=DIMENSION,
+            name="joint_coverage_risk",
+            label=label,
+            risk=risk,
+            metrics=signal.meta
+        )
+
     coverage = get_value(signal_map, "joint_coverage")
     risk = float(1.0 - coverage)
     

@@ -220,6 +220,15 @@ def feature_variance_score(df: pd.DataFrame) -> Structure:
     # 1. get numeric df 
     X = _feature_matrix(df)
 
+    if X.shape[1] == 0:
+        return Structure(
+            dimension=DIMENSION,
+            name="feature_variance_score",
+            value=None,
+            status="no_value",
+            meta={"reason": "no usable numeric or low-cardinality categorical features"}
+        )
+
     # 2. find it's variance
     variances = X.var(skipna=True)
     # 

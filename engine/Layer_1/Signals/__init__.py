@@ -57,7 +57,7 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
 
     # Target viability signals
     if target_column and target_column in df.columns:
-        target_results = _run_target_signals(df[target_column])
+        target_results = _run_target_signals(df[target_column], target_column)
         structures.extend(target_results)
         for struct in target_results:
             name = struct.name
@@ -71,7 +71,8 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
                     flat["target_degeneracy_flag"] = True
                 continue
 
-            if name == "dataset_shape":
+            if name == "target_shape" and isinstance(value, dict):
+                flat["target_rows"] = value.get("rows", 0)
                 continue
 
             if value is not None:
