@@ -61,6 +61,8 @@ def get_value(signal_map, name):
         raise ValueError(f"{name} unusable")
     return s.value
 
+# ------------------ CONTRACT VALIDATION ------------------
+
 
 def validate_signals_contract(signal_map: Dict[str, Structure]):
     for name, expected_type in REQUIRED_SIGNALS.items():

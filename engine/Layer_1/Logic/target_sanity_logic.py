@@ -52,6 +52,7 @@ class OverallResult:
 # ------------------ SIGNAL ACCESS LAYER ------------------
 
 
+# convert the list of signals to dict (easy to access)
 def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
     signal_map = {}
 
@@ -63,6 +64,7 @@ def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
     return signal_map
 
 
+# a shortcut helper func to get the value of the signal
 def get_value(signal_map: Dict[str, Structure], name: str):
     s = signal_map[name]
 
@@ -70,15 +72,6 @@ def get_value(signal_map: Dict[str, Structure], name: str):
         raise ValueError(f"{name} unusable: {s.status}")
 
     return s.value
-
-
-def get_optional(signal_map: Dict[str, Structure], name: str):
-    s = signal_map[name]
-
-    if s.status == "ok":
-        return s.value
-
-    return None
 
 
 # ------------------ CONTRACT VALIDATION ------------------
@@ -104,7 +97,6 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
     signal = signal_map["target_missing_ratio"]
     ratio = signal.value
     samples = signal.meta["n_samples"]
-    missing_count = int(ratio * samples)
 
     if ratio >= 0.4:
         label = "CRITICAL"
@@ -121,7 +113,7 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
         metrics={
             "missing_ratio": round(ratio, 4),
             "total_samples": samples,
-            "missing_count": missing_count
+            "missing_count": signal.meta["missing_count"]
         }
     )
 
@@ -359,13 +351,13 @@ def run_target_viability(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension='target_viability', name='target_column_name', value='Survived', status='ok', meta={'dtype': 'int64'}),
+        Structure(dimension='target_viability', name='target_column_name', value='Ticket', status='ok', meta={'dtype': 'object'}),
         Structure(dimension='target_viability', name='target_shape', value={'rows': 891, 'cols': 1}, status='ok', meta={'n_samples': 891}),
         Structure(dimension='target_viability', name='target_missing_ratio', value=0.0, status='ok', meta={'n_samples': 891, 'missing_count': 0}),
-        Structure(dimension='target_viability', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 2}),
-        Structure(dimension='target_viability', name='dominant_class_ratio', value=0.6161616161616161, status='ok', meta={'n_samples': 891, 'dominant_class': '1', 'dominant_count': 549, 'class_distribution': {'1': 0.6162, '0': 0.3838}}),
-        Structure(dimension='target_viability', name='target_entropy', value=0.9607078989902569, status='ok', meta={'num_classes': 2, 'max_entropy': 1.0}),
-        Structure(dimension='target_viability', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'int', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'int': 891}})
+        Structure(dimension='target_viability', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 681}),
+        Structure(dimension='target_viability', name='dominant_class_ratio', value=0.007856341189674524, status='ok', meta={'n_samples': 891, 'dominant_class': '347082', 'dominant_count': 7, 'total_unique': 681, 'class_distribution': {'347082': 0.0079, '1601': 0.0079, 'ca. 2343': 0.0079, '3101295': 0.0067, 'ca 2144': 0.0067, '347088': 0.0067, '382652': 0.0056, 's.o.c. 14879': 0.0056, '113760': 0.0045, '19950': 0.0045, '_other': 0.936}}),
+        Structure(dimension='target_viability', name='target_entropy', value=9.23300039564576, status='ok', meta={'num_classes': 681, 'max_entropy': 9.4115}),
+        Structure(dimension='target_viability', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'str', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'str': 891}})
     ]
 
     results, overall, mock_signals = run_target_viability(mock_signals)

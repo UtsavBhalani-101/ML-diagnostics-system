@@ -15,7 +15,7 @@ FAILURE_MODES = [
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-#^ ------------------ STRUCTURE ------------------
+#& ------------------ STRUCTURE ------------------
 
 @dataclass(frozen=True)
 class Structure:
@@ -27,7 +27,7 @@ class Structure:
 
 DIMENSION = "sample_adequacy"
 
-#^ ------------------ ENFORCEMENT ------------------
+#& ------------------ ENFORCEMENT ------------------
 
 def enforce(signal: Structure):
     if signal.status == "ok" and signal.value is None:
@@ -36,7 +36,7 @@ def enforce(signal: Structure):
     if signal.status in ("no_value", "error") and signal.value is not None:
         raise ValueError(f"{signal.name}: invalid state mismatch")
 
-#^ ------------------ VALIDATION ------------------
+#& ------------------ VALIDATION ------------------
 
 def validate_data(df: pd.DataFrame):
     if df is None or df.shape[0] == 0:
@@ -47,7 +47,7 @@ def validate_data(df: pd.DataFrame):
 
     return {"status": "pass"}
 
-#^ ------------------ HELPERS ------------------
+#& ------------------ HELPERS ------------------
 
 def _feature_matrix(df, cardinality_threshold=20):
     
@@ -89,9 +89,10 @@ def _nan_safe_distance(diff):
 
     return np.sqrt(np.nansum(diff ** 2, axis=1) / valid_dims)
 
-#^ ------------------ FAILURE MODE A ------------------
+#& ------------------ FAILURE MODE A ------------------
 
-def duplicated_ratio(df: pd.DataFrame) -> Structure:
+# get actual duplicates without missing 
+def duplicated_ratio(df: pd.DataFrame) -> Structure:   #! should also detect hidden missing
     df_copy = df.fillna("__MISSING__")
     unique_rows = df_copy.drop_duplicates().shape[0]
     total_rows = df_copy.shape[0]
@@ -117,6 +118,8 @@ def effective_sample_size(df: pd.DataFrame) -> Structure:
     Proxy using average nearest neighbor distance.
     Lower distance → more clustering → lower effective size
     """
+    
+    # 1. get the numeric df (distances must be in numbers)
     X = _feature_matrix(df)
 
     if X.shape[0] < 2:
@@ -125,24 +128,26 @@ def effective_sample_size(df: pd.DataFrame) -> Structure:
             name="effective_sample_size",
             value=None,
             status="no_value",
-            meta={"reason" : "insufficient samples"}
+            meta={"reason" : "too insufficient samples"}
         )
 
-    # sample subset for efficiency
+    # 2. take 500 samples at random and find the nearest neighbor distances (finding all is computationally expensive)
     sample = X.sample(min(500, len(X)), random_state=42)
 
+    # 3. get distances
     dists = []
     arr = sample.values
 
     for i in range(len(arr)):
-        diff = arr - arr[i]
-        dist = _nan_safe_distance(diff)
-        dist[i] = np.inf
-        dists.append(dist.min())
+        diff = arr - arr[i]          # difference from sample i to all others
+        dist = _nan_safe_distance(diff)  # compute normalized distance
+        dist[i] = np.inf             # ignore self-distance
+        dists.append(dist.min())     # nearest neighbor distance
 
+    # 4. get average nn distance
     avg_nn_dist = np.mean(dists)
 
-    # normalize (heuristic)
+    # 5. normalize (heuristic)
     score = float(avg_nn_dist)
 
     signal = Structure(
@@ -165,6 +170,8 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
     """
     Measures similarity between consecutive rows (order-sensitive proxy)
     """
+    
+    # 1. get a clean numbers only matrix / df
     X = _feature_matrix(df)
 
     if X.shape[0] < 2:
@@ -176,10 +183,16 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
             meta={"reason": "insufficient samples"}
         )
 
+    # 2. convert df -> arr
     arr = X.values
+    
+    # 3. arr[i] - arr[i-1] for all
     diff = arr[1:] - arr[:-1]
+    
+    # 4. find euclidean distances for the differences
     dist = _nan_safe_distance(diff)
 
+    # 5. average out 
     score = float(np.mean(dist))
 
     signal = Structure(
@@ -198,13 +211,18 @@ def sample_dependency_score(df: pd.DataFrame) -> Structure:
 
 
 
-#^ ------------------ FAILURE MODE B ------------------
+#& ------------------ FAILURE MODE B ------------------
 
 def feature_variance_score(df: pd.DataFrame) -> Structure:
+    """
+    
+    """
+    # 1. get numeric df 
     X = _feature_matrix(df)
 
-
+    # 2. find it's variance
     variances = X.var(skipna=True)
+    # 
     threshold = np.nanmedian(variances) * 1e-3 if len(variances) > 0 else 0
     low_var_ratio = float((variances < threshold).mean())
     low_var_cols = list(variances[variances < threshold].index)
@@ -331,7 +349,7 @@ def joint_coverage(df: pd.DataFrame, bins=5) -> Structure:
     return signal
 
 
-# ------------------ REGISTRY ------------------
+#& ------------------ REGISTRY ------------------
 
 SIGNALS_REGISTRY = [
     duplicated_ratio,
@@ -351,10 +369,11 @@ REQUIRED_SIGNALS = {
     "joint_coverage": float
 }
 
-# ------------------ ORCHESTRATOR ------------------
+#& ------------------ ORCHESTRATOR ------------------
 
 def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
 
+    # 1. validate data
     validation = validate_data(df)
 
     if validation["status"] == "fail":
@@ -368,8 +387,10 @@ def run_sample_adequacy(df: pd.DataFrame) -> List[Structure]:
             )
         ]
 
+    # 2. a empty result list holder
     results = []
 
+    # 3. run all the signals in registry, for each signal give input df
     for fn in SIGNALS_REGISTRY:
         try:
             results.append(fn(df))
@@ -390,11 +411,12 @@ if __name__ == "__main__":
     import numpy as np
 
     df = pd.DataFrame({
-        "age": [25, 30, np.nan, 35, 40, 25, 30, np.nan, 35, 40],
+        "age": [25, 30, 30, 35, 40, 25, 30, 29, 35, 40],
         "city": ["NY", "LA", "SF", "NY", "LA", "NY", "LA", "SF", "NY", "LA"],
         'missing' : [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     })
     
+  
     df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
 
     results = run_sample_adequacy(df)

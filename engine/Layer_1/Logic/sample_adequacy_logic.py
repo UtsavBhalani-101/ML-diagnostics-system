@@ -69,15 +69,6 @@ def get_value(signal_map: Dict[str, Structure], name: str):
     return s.value
 
 
-def get_optional(signal_map: Dict[str, Structure], name: str):
-    s = signal_map[name]
-
-    if s.status == "ok":
-        return s.value
-
-    return None
-
-
 # ------------------ CONTRACT VALIDATION ------------------
 
 def validate_signals_contract(signal_map: Dict[str, Structure]):

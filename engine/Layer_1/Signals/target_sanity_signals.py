@@ -50,7 +50,7 @@ HIDDEN_MISSING = {"na", "n/a", "null", "none", "", " ", "?", "unknown", "np.nan"
 def clean_target(y) -> pd.Series:
     y_clean = pd.Series(y).copy()
 
-    # Step 1: process only string elements
+    # Step 1: process only string dtype or object dtypes 
     if y_clean.dtype == object or pd.api.types.is_string_dtype(y_clean):
         is_str = y_clean.map(lambda x: isinstance(x, str))
         if is_str.any():
@@ -61,12 +61,13 @@ def clean_target(y) -> pd.Series:
                 .str.lower()
             )
 
-    # Step 2: replace hidden missing
+    # Step 2: replace hidden missing with np.nan
     y_clean = y_clean.replace(list(HIDDEN_MISSING), np.nan)
 
     return y_clean
 
 
+# count the unique dtype of all the elements in y 
 def is_mixed_type(y: pd.Series) -> bool:
     types = set(type(v) for v in y.dropna())
     return len(types) > 1
@@ -74,6 +75,7 @@ def is_mixed_type(y: pd.Series) -> bool:
 
 # ------------------ VALIDATION ------------------
 
+# set of general guards that corrupt every signal, if found don't allow any further processing
 def validate_target(y: pd.Series) -> Dict:
 
     if len(y) == 0:
@@ -82,11 +84,15 @@ def validate_target(y: pd.Series) -> Dict:
     if y.isna().all():
         return {"status": "fail", "reason": "Target is entirely filled with np.nan missing"}
 
+    if y.dropna().empty:
+        return {"status" : "fail", "reason" : "no non-null values exists"}
+
     return {"status": "pass", "y": y}
 
 
 # ------------------ SIGNALS ------------------
 
+# get number of rows
 def target_shape(y: pd.Series) -> Structure:
     signal = Structure(
         dimension=DIMENSION,
@@ -100,6 +106,7 @@ def target_shape(y: pd.Series) -> Structure:
     return signal
 
 
+# get standard (np.nan) missing count
 def target_missing_ratio(y: pd.Series) -> Structure:
     ratio = float(y.isna().mean())
 
@@ -108,12 +115,16 @@ def target_missing_ratio(y: pd.Series) -> Structure:
             name="target_missing_ratio",
             value=ratio,
             status="ok",
-            meta={"n_samples": len(y), "missing_count": int(y.isna().sum())}
+            meta={
+                "n_samples": len(y), 
+                "missing_count": int(y.isna().sum())
+            }
         )
 
     enforce(signal)
     return signal
 
+# is target useless ? (does it only contain 1 unique value ?)
 def target_degeneracy_flag(y: pd.Series) -> Structure:
     unique = int(y.dropna().nunique())
     is_degenerate = unique <= 1
@@ -129,37 +140,42 @@ def target_degeneracy_flag(y: pd.Series) -> Structure:
     enforce(signal)
     return signal
 
-
+# get the dominant class (index[0]) ratio
 def dominant_class_ratio(y: pd.Series) -> Structure:
     counts = y.value_counts(normalize=True)
-    
-    if y.dropna().empty:
-        return Structure(
-            dimension=DIMENSION,
-            name="dominant_class_ratio",
-            value=None,
-            status="no_value",
-            meta={
-                "n_samples": len(y),
-                "dominant_class": str(counts.index[0]),
-                "dominant_count": int(y.value_counts().iloc[0]),
-                "class_distribution": {str(k): round(float(v), 4) for k, v in counts.items()}
-            }
-        )
 
-    ratio = float(y.value_counts(normalize=True).iloc[0])
+    ratio = float(counts.iloc[0])
+
+    # cap distribution to top 10 classes to avoid flooding on regression targets
+    TOP_N = 10
+    total_unique = len(counts)
+
+    if total_unique <= TOP_N:
+        class_dist = {str(k): round(float(v), 4) for k, v in counts.items()}
+    else:
+        top = counts.head(TOP_N)
+        class_dist = {str(k): round(float(v), 4) for k, v in top.items()}
+        class_dist["_other"] = round(float(1.0 - top.sum()), 4)
 
     signal = Structure(
         dimension=DIMENSION,
         name="dominant_class_ratio",
         value=ratio,
         status="ok",
-        meta={"n_samples": len(y)}
+        meta={
+            "n_samples": len(y),
+            "dominant_class": str(counts.index[0]),
+            "dominant_count": int(y.value_counts().iloc[0]),
+            "total_unique": total_unique,
+            "class_distribution": class_dist
+        }
     )
 
     enforce(signal)
     return signal
 
+
+# get how predictable the data points are
 def target_entropy(y: pd.Series) -> Structure:
     if y.dropna().empty:
         return Structure(
@@ -187,7 +203,10 @@ def target_entropy(y: pd.Series) -> Structure:
     enforce(signal)
     return signal
 
+# how badly the target is mixed with different dtypes 
 def type_contamination_ratio(y: pd.Series) -> Structure:
+    
+    # 1. drop null values 
     non_null = y.dropna()
 
     if len(non_null) == 0:
@@ -196,12 +215,16 @@ def type_contamination_ratio(y: pd.Series) -> Structure:
             name="type_contamination_ratio",
             value=None,
             status="no_value",
-            meta={"reason": "empty target"}
+            meta={"reason": "target only contains missing values"}
         )
 
+    # 2. get the dtype of each 
     types = non_null.map(lambda x: type(x).__name__)
+    
+    # 3. from the value count, where is the max located 
     majority_type = types.value_counts().idxmax()
 
+    # 4. what % of rows have type different from majority 
     contamination = float((types != majority_type).mean())
     
     type_counts = types.value_counts()
@@ -250,7 +273,10 @@ REQUIRED_SIGNALS = {
 
 def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
 
+    # 1. get clean y
     y_clean = clean_target(y)
+    
+    # 2. validate it
     validation = validate_target(y_clean)
 
     if validation["status"] == "fail":
@@ -264,7 +290,7 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
             )
         ]
         
-    # target col name before running the registry loop
+    #3. get target col name before running the registry loop
     name_signal = Structure(
         dimension=DIMENSION,
         name="target_column_name",
@@ -273,9 +299,11 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
         meta={"dtype": str(y.dtype)}
     )
 
+    # 4. save the target col name 
     results = [name_signal]
     
-    # registry loop to run all signals
+    # 5. registry loop to run all signals:
+    #  take y_clean -> give to signal -> save the result and logger 
 
     for signal_fn in SIGNALS_REGISTRY:
         try:
@@ -283,6 +311,7 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
             logger.debug(f"{signal_fn.__name__} success")
             results.append(res)
 
+    # if any error occured -> save that and logger 
         except Exception as e:
             logger.error("Signal failed", extra={
                 "signal": signal_fn.__name__,
@@ -307,10 +336,10 @@ if __name__ == "__main__":
     # example_target_col = pd.Series([])
 
     df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
-    target_col = df['Survived']
+    target_col = df['Ticket']
 
     print("--- Running Target Signals ---")
-    results = run_target_sanity(target_col, 'Survived')
+    results = run_target_sanity(target_col, 'Ticket')
     
     for res in results:
         # print(f"{res.name}:")
