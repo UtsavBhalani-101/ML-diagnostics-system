@@ -233,7 +233,7 @@ export default function FileUpload({ onFileValidated, onReset }: FileUploadProps
                                         )}
                                     </p>
                                     <p className="font-mono text-sm text-muted-foreground/70">
-                                        Supports CSV, Excel, Parquet, and JSON files - single file only
+                                        Supports CSV - single file only
                                     </p>
                                 </div>
 
