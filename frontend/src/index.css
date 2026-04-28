@@ -144,6 +144,124 @@ html:not(.dark) .bg-white\/\[0\.03\] {
   background-color: rgba(19, 91, 236, 0.05) !important;
 }
 
+.diagnostic-gate {
+  --diag-bg: #f4f6fa;
+  --diag-panel: #ffffff;
+  --diag-surface: #f8fafc;
+  --diag-body: #ffffff;
+  --diag-row-hover: #f1f5f9;
+  --diag-strong: #0f172a;
+  --diag-text: #243041;
+  --diag-muted: #647083;
+  --diag-muted-soft: #94a3b8;
+  --diag-border: rgba(15, 23, 42, 0.14);
+  --diag-border-soft: rgba(15, 23, 42, 0.08);
+  --diag-chip: #eef2f7;
+  --diag-red-panel: #fff1f1;
+  --diag-red-header: #ffe7e7;
+  --diag-red-border: #f2b0b0;
+  --diag-amber-panel: #fff7e8;
+  --diag-amber-header: #fff1d8;
+  --diag-amber-border: #efc77a;
+  --diag-pass-panel: #edfdf4;
+  --diag-pass-border: #9ad7b3;
+}
+
+.dark .diagnostic-gate {
+  --diag-bg: #0f1117;
+  --diag-panel: #111620;
+  --diag-surface: #121722;
+  --diag-body: #0f1117;
+  --diag-row-hover: #121722;
+  --diag-strong: #f4f7fb;
+  --diag-text: #e5e9f0;
+  --diag-muted: #7f8795;
+  --diag-muted-soft: #68717f;
+  --diag-border: rgba(255, 255, 255, 0.06);
+  --diag-border-soft: rgba(255, 255, 255, 0.06);
+  --diag-chip: #121722;
+  --diag-red-panel: #1a0e0e;
+  --diag-red-header: #1a0e0e;
+  --diag-red-border: #2a2024;
+  --diag-amber-panel: #1a1408;
+  --diag-amber-header: #1a1408;
+  --diag-amber-border: #2b2418;
+  --diag-pass-panel: #0d1b18;
+  --diag-pass-border: #173528;
+}
+
+.diag-page {
+  background: var(--diag-bg);
+  color: var(--diag-text);
+}
+
+.diag-panel {
+  background: var(--diag-panel);
+  border-color: var(--diag-border);
+}
+
+.diag-surface {
+  background: var(--diag-surface);
+  border-color: var(--diag-border);
+}
+
+.diag-body {
+  background: var(--diag-body);
+}
+
+.diag-row {
+  background: var(--diag-body);
+  border-color: var(--diag-border-soft);
+}
+
+.diag-row:hover {
+  background: var(--diag-row-hover);
+}
+
+.diag-text {
+  color: var(--diag-text);
+}
+
+.diag-strong {
+  color: var(--diag-strong);
+}
+
+.diag-muted {
+  color: var(--diag-muted);
+}
+
+.diag-muted-soft {
+  color: var(--diag-muted-soft);
+}
+
+.diag-chip {
+  background: var(--diag-chip);
+  border-color: var(--diag-border);
+}
+
+.diag-fail-panel {
+  background: var(--diag-red-panel);
+  border-color: var(--diag-red-border);
+}
+
+.diag-fail-header {
+  background: var(--diag-red-header);
+}
+
+.diag-warn-panel {
+  background: var(--diag-amber-panel);
+  border-color: var(--diag-amber-border);
+}
+
+.diag-warn-header {
+  background: var(--diag-amber-header);
+}
+
+.diag-pass-panel {
+  background: var(--diag-pass-panel);
+  border-color: var(--diag-pass-border);
+}
+
 /* Status Indicator Animation */
 @keyframes ping {
 

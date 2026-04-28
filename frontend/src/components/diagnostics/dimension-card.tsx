@@ -12,32 +12,28 @@ interface DimensionCardProps {
 const STATUS_STYLES: Record<ValidationStatus, {
     label: string;
     badge: string;
-    accent: string;
     iconClass: string;
     title: string;
     icon: typeof CheckCircle2;
 }> = {
     PASS: {
         label: "PASS",
-        badge: "border-border text-foreground",
-        accent: "border-l-border",
+        badge: "border-green-500/35 bg-green-500/10 text-green-400",
         iconClass: "text-green-500",
         title: "font-medium",
         icon: CheckCircle2,
     },
     FAIL: {
         label: "FAIL",
-        badge: "border-red-500 text-red-500",
-        accent: "border-l-red-500",
-        iconClass: "text-red-500",
+        badge: "border-[#e24b4a]/40 bg-[#e24b4a]/10 text-[#ff7775]",
+        iconClass: "text-[#e24b4a]",
         title: "font-bold",
         icon: CircleSlash,
     },
     WARNING: {
         label: "WARNING",
-        badge: "border-amber-500 text-amber-500",
-        accent: "border-l-amber-500",
-        iconClass: "text-amber-500",
+        badge: "border-[#d4901a]/40 bg-[#d4901a]/10 text-[#e9ad43]",
+        iconClass: "text-[#d4901a]",
         title: "font-semibold",
         icon: AlertTriangle,
     },
@@ -72,11 +68,13 @@ function StatusBadge({ status }: { status: ValidationStatus }) {
 
 function ImpactBadge({ impact }: { impact: ValidationCheck["impact"] }) {
     const className = impact === "BLOCKER"
-        ? "border-border text-foreground"
-        : "border-border text-muted-foreground";
+        ? "border-[#e24b4a]/40 bg-[#e24b4a]/10 text-[#ff7775]"
+        : impact === "DEGRADING"
+            ? "border-[#d4901a]/40 bg-[#d4901a]/10 text-[#e9ad43]"
+            : "diag-chip diag-muted";
 
     return (
-        <span className={clsx("inline-flex w-fit rounded-md border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest", className)}>
+        <span className={clsx("inline-flex w-fit rounded border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest", className)}>
             {impact}
         </span>
     );
@@ -87,13 +85,13 @@ function MobileCheckCard({ check }: { check: ValidationCheck }) {
     const isPass = check.status === "PASS";
 
     return (
-        <div className={clsx("rounded-md border border-l-4 border-border bg-card p-4", styles.accent, isPass && "py-3")}>
+        <div className={clsx("diag-row rounded border p-4", isPass && "py-3")}>
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <p className="diag-muted font-mono text-[10px] uppercase tracking-widest">
                         Test
                     </p>
-                    <h4 className={clsx("mt-1 text-sm text-foreground", styles.title)}>
+                    <h4 className={clsx("diag-text mt-1 text-sm", styles.title)}>
                         {check.testName}
                     </h4>
                 </div>
@@ -105,7 +103,7 @@ function MobileCheckCard({ check }: { check: ValidationCheck }) {
                 <MobileField label="Threshold" value={check.threshold} />
                 <MobileField label="Rule" value={check.rule} />
                 <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <p className="diag-muted mb-1 text-[10px] uppercase tracking-widest">
                         Impact
                     </p>
                     <ImpactBadge impact={check.impact} />
@@ -119,10 +117,10 @@ function MobileCheckCard({ check }: { check: ValidationCheck }) {
 function MobileField({ label, value }: { label: string; value: string }) {
     return (
         <div>
-            <p className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+            <p className="diag-muted mb-1 text-[10px] uppercase tracking-widest">
                 {label}
             </p>
-            <p className="text-foreground">{value}</p>
+            <p className={clsx("diag-text", label === "Threshold" && "diag-muted-soft")}>{value}</p>
         </div>
     );
 }
@@ -132,17 +130,12 @@ function CheckRow({ check }: { check: ValidationCheck }) {
 
     return (
         <div
-            className={clsx(
-                "grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 rounded-md border border-l-4 border-border bg-card px-3 text-sm",
-                check.status === "PASS" ? "py-2" : "py-3",
-                styles.accent,
-            )}
+            className="diag-row grid grid-cols-[0.72fr_1.2fr_0.95fr_1.15fr_0.86fr] gap-3 rounded border px-3 py-2.5 text-sm transition-colors"
         >
-            <div className={clsx("text-foreground", styles.title)}>{check.testName}</div>
             <StatusBadge status={check.status} />
-            <div className="font-mono text-xs text-foreground">{check.observed}</div>
-            <div className="font-mono text-xs text-muted-foreground">{check.threshold}</div>
-            <div className="text-xs leading-relaxed text-foreground">{check.rule}</div>
+            <div className={clsx("diag-text", styles.title)}>{check.testName}</div>
+            <div className="diag-strong font-mono text-xs">{check.observed}</div>
+            <div className="diag-muted-soft font-mono text-xs">{check.threshold}</div>
             <ImpactBadge impact={check.impact} />
         </div>
     );
@@ -157,20 +150,20 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
     const passChecks = section.checks.filter((check) => check.status === "PASS");
 
     return (
-        <section className={clsx("rounded-lg border border-border bg-card p-5 md:p-6", className)}>
+        <section className={clsx("diag-panel rounded-md border p-4 md:p-5", className)}>
             <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="flex gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                        <SectionIcon className="size-5 text-muted-foreground" />
+                    <div className="diag-body flex size-10 shrink-0 items-center justify-center rounded border [border-color:var(--diag-border)]">
+                        <SectionIcon className="diag-muted size-5" />
                     </div>
                     <div>
-                        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                        <p className="diag-muted font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                             Validation Checks
                         </p>
-                        <h3 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                        <h3 className="diag-strong mt-1 text-lg font-semibold tracking-tight">
                             {section.label}
                         </h3>
-                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                        <p className="diag-muted mt-1 max-w-2xl text-sm">
                             {section.description}
                         </p>
                     </div>
@@ -184,12 +177,11 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
             </div>
 
             <div className="hidden md:block">
-                <div className="mb-2 grid grid-cols-[1.25fr_0.72fr_1fr_1.15fr_1.45fr_0.9fr] gap-3 px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                    <span>Test</span>
+                <div className="diag-muted mb-2 grid grid-cols-[0.72fr_1.2fr_0.95fr_1.15fr_0.86fr] gap-3 px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em]">
                     <span>Status</span>
+                    <span>Test</span>
                     <span>Observed</span>
-                    <span>Threshold</span>
-                    <span>Decision Rule</span>
+                    <span className="diag-muted-soft">Threshold</span>
                     <span>Impact</span>
                 </div>
                 <div className="space-y-2">
@@ -198,11 +190,11 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
                     ))}
                 </div>
                 {priorityChecks.length > 0 && passChecks.length > 0 && (
-                    <details className="mt-3 rounded-md border border-border bg-background">
-                        <summary className="cursor-pointer list-none px-3 py-2 font-mono text-xs text-muted-foreground">
+                    <details className="diag-row mt-3 rounded border">
+                        <summary className="diag-muted cursor-pointer list-none px-3 py-2 font-mono text-xs">
                             {passChecks.length} passing checks collapsed
                         </summary>
-                        <div className="space-y-2 border-t border-border p-3">
+                        <div className="space-y-2 border-t p-3 [border-color:var(--diag-border)]">
                             {passChecks.map((check) => (
                                 <CheckRow key={check.id} check={check} />
                             ))}
@@ -216,11 +208,11 @@ export function DimensionCard({ section, className }: DimensionCardProps) {
                     <MobileCheckCard key={check.id} check={check} />
                 ))}
                 {priorityChecks.length > 0 && passChecks.length > 0 && (
-                    <details className="rounded-md border border-border bg-background">
-                        <summary className="cursor-pointer list-none px-3 py-2 font-mono text-xs text-muted-foreground">
+                    <details className="diag-row rounded border">
+                        <summary className="diag-muted cursor-pointer list-none px-3 py-2 font-mono text-xs">
                             {passChecks.length} passing checks collapsed
                         </summary>
-                        <div className="space-y-3 border-t border-border p-3">
+                        <div className="space-y-3 border-t p-3 [border-color:var(--diag-border)]">
                             {passChecks.map((check) => (
                                 <MobileCheckCard key={check.id} check={check} />
                             ))}
@@ -242,15 +234,15 @@ function Counter({
     tone: "fail" | "warning" | "pass";
 }) {
     const className = tone === "fail"
-        ? "border-l-red-500"
+        ? "border-[#e24b4a]/40 bg-[#e24b4a]/10 text-[#ff7775]"
         : tone === "warning"
-            ? "border-l-amber-500"
-            : "border-l-border";
+            ? "border-[#d4901a]/40 bg-[#d4901a]/10 text-[#e9ad43]"
+            : "border-green-500/30 bg-green-500/10 text-green-400";
 
     return (
-        <div className={clsx("rounded-md border border-l-4 border-border bg-background px-3 py-2 text-center text-foreground", className)}>
-            <div className="text-lg font-bold tabular-nums">{value}</div>
-            <div className="mt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
+        <div className={clsx("rounded border px-3 py-2 text-center font-mono", className)}>
+            <div className="font-sans text-lg font-bold tabular-nums">{value}</div>
+            <div className="mt-0.5 text-[9px] uppercase tracking-widest">{label}</div>
         </div>
     );
 }

@@ -6,8 +6,6 @@ import type { Route } from "next";
 import clsx from "clsx";
 import {
     Activity,
-    ArrowRight,
-    CheckCircle2,
     Columns3,
     Database,
     FileCheck2,
@@ -130,28 +128,35 @@ export default function Layer1ReportPage() {
     const validation = buildLayer1ValidationModel(data, facts);
 
     return (
-        <main className="relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
-            <section className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-12 md:px-8">
-                <div className="flex items-center gap-3">
+        <main className="diagnostic-gate diag-page relative flex min-h-[calc(100vh-8rem)] flex-grow flex-col">
+            <section className="relative z-10 mx-auto flex w-full max-w-[1480px] flex-col gap-6 px-4 py-7 md:px-7">
+                <div className="flex items-center gap-3 border-b pb-4 [border-color:var(--diag-border)]">
                     <Link
                         href={"/diagnostics" as Route}
-                        className="font-mono text-base text-muted-foreground transition-colors hover:text-foreground"
+                        className="diag-muted font-mono text-xs uppercase tracking-[0.18em] transition-colors hover:text-[var(--diag-strong)]"
                     >
                         Diagnostics
                     </Link>
-                    <span className="text-muted-foreground/40">/</span>
-                    <span className="font-mono text-base text-foreground">
+                    <span className="diag-muted-soft font-mono">/</span>
+                    <span className="diag-text font-mono text-xs uppercase tracking-[0.18em]">
                         Structural Validation Gate
                     </span>
                 </div>
 
-                <div>
-                    <p className="font-mono text-base font-semibold tracking-wide text-muted-foreground">
-                        Layer 1 - Pre-model Validation Gate
-                    </p>
-                    <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                        Can this dataset proceed?
-                    </h1>
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                    <div>
+                        <p className="diag-muted font-mono text-[11px] font-semibold uppercase tracking-[0.28em]">
+                            Layer 1 - Pre-model Validation Gate
+                        </p>
+                        <h1 className="diag-strong mt-2 text-3xl font-bold tracking-tight md:text-5xl">
+                            Can this dataset proceed?
+                        </h1>
+                    </div>
+                    <div className="diag-muted grid grid-cols-1 gap-2 font-mono text-[10px] uppercase tracking-[0.16em] sm:grid-cols-3">
+                        <span className="diag-chip rounded border px-3 py-2">Gate deterministic</span>
+                        <span className="diag-chip rounded border px-3 py-2">Layer 1 only</span>
+                        <span className="diag-chip rounded border px-3 py-2">No model fit</span>
+                    </div>
                 </div>
 
                 <DecisionBanner decision={validation.decision} />
@@ -190,7 +195,7 @@ export default function Layer1ReportPage() {
                 )}
 
                 <div>
-                    <h2 className="mb-5 font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    <h2 className="diag-muted mb-5 font-mono text-xs font-bold uppercase tracking-[0.2em]">
                         Section: Validation Checks
                     </h2>
 
@@ -201,7 +206,7 @@ export default function Layer1ReportPage() {
                     </div>
                 </div>
 
-                <div className="h-8" />
+                <div className="h-5" />
             </section>
         </main>
     );
@@ -216,23 +221,23 @@ function DecisionBanner({ decision }: { decision: ValidationDecision }) {
             : ShieldCheck;
 
     return (
-        <section className={clsx("rounded-lg border border-l-4 bg-card p-6 md:p-8", styles.panel)}>
+        <section className={clsx("diag-panel rounded-md border border-l-4 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.015)] md:p-6", styles.panel)}>
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                 <div className="flex gap-4">
-                    <div className="flex size-12 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                    <div className="diag-body flex size-12 shrink-0 items-center justify-center rounded border [border-color:var(--diag-border)]">
                         <Icon className={clsx("size-7", styles.icon)} />
                     </div>
                     <div>
-                        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
+                        <p className="diag-muted font-mono text-[10px] font-bold uppercase tracking-[0.24em]">
                             System Decision
                         </p>
-                        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-foreground md:text-5xl">
+                        <h2 className="diag-strong mt-2 text-3xl font-black uppercase tracking-tight md:text-5xl">
                             {decision.status}
                         </h2>
-                        <p className="mt-3 text-lg font-semibold text-foreground">
+                        <p className="diag-text mt-3 text-lg font-semibold">
                             {decision.message}
                         </p>
-                        <p className="mt-2 font-mono text-sm text-muted-foreground">
+                        <p className="diag-muted mt-2 font-mono text-sm">
                             {decision.summary}
                         </p>
                     </div>
@@ -263,41 +268,36 @@ function DecisionFlow({ decision }: { decision: ValidationDecision }) {
     ];
 
     return (
-        <section className="rounded-lg border border-border bg-card p-5 md:p-6">
+        <section className="diag-panel rounded-md border p-4 md:p-5">
             <div className="mb-5 flex items-center gap-2">
-                <ListChecks className="size-4 text-muted-foreground" />
-                <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                <ListChecks className="diag-muted size-4" />
+                <h2 className="diag-muted font-mono text-xs font-bold uppercase tracking-[0.2em]">
                     Decision Flow
                 </h2>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] md:items-stretch">
+            <div className="grid gap-4 md:grid-cols-4 md:items-start">
                 {steps.map((step, index) => (
-                    <div key={step.label} className="contents">
-                        <FlowStep step={step} />
-                        {index < steps.length - 1 && (
-                            <div className="hidden items-center justify-center md:flex">
-                                <ArrowRight className="size-5 text-muted-foreground" />
-                            </div>
-                        )}
-                    </div>
+                    <FlowStep key={step.label} step={step} isLast={index === steps.length - 1} />
                 ))}
             </div>
         </section>
     );
 }
 
-function FlowStep({ step }: { step: { label: string; caption: string; status: ValidationStatus } }) {
+function FlowStep({ step, isLast }: { step: { label: string; caption: string; status: ValidationStatus }; isLast: boolean }) {
     const styles = getStatusStyles(step.status);
-    const Icon = step.status === "FAIL" ? OctagonX : step.status === "WARNING" ? TriangleAlert : CheckCircle2;
 
     return (
-        <div className={clsx("rounded-md border border-l-4 bg-card p-4", styles.panel)}>
-            <div className="flex items-start gap-3">
-                <Icon className={clsx("mt-0.5 size-5 shrink-0", styles.icon)} />
+        <div className="relative">
+            {!isLast && (
+                <div className="absolute left-[13px] top-[15px] hidden h-px w-[calc(100%+1rem)] md:block [background-color:var(--diag-border)]" />
+            )}
+            <div className="relative flex items-start gap-3">
+                <span className={clsx("mt-1 size-3 shrink-0 rounded-full ring-4", styles.dot)} />
                 <div>
-                    <p className="font-semibold text-foreground">{step.label}</p>
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">{step.caption}</p>
+                    <p className="diag-muted font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">{step.label}</p>
+                    <p className="diag-text mt-2 text-sm font-semibold">{step.caption}</p>
                 </div>
             </div>
         </div>
@@ -314,19 +314,19 @@ function DecisionMetric({
     tone: "fail" | "warning" | "pass" | "neutral";
 }) {
     const className = tone === "fail"
-        ? "border-l-red-500"
+        ? "diag-fail-panel"
         : tone === "warning"
-            ? "border-l-amber-500"
+            ? "diag-warn-panel"
             : tone === "pass"
-                ? "border-l-green-500"
-                : "border-l-border";
+                ? "diag-pass-panel"
+                : "diag-panel";
 
     return (
-        <div className={clsx("rounded-lg border border-l-4 border-border bg-card p-5 font-mono", className)}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <div className={clsx("rounded-md border p-4 font-mono", className)}>
+            <p className="diag-muted text-[10px] font-bold uppercase tracking-[0.2em]">
                 {label}
             </p>
-            <p className="mt-3 text-3xl font-black tabular-nums text-foreground">{value}</p>
+            <p className="diag-strong mt-3 font-sans text-3xl font-black tabular-nums">{value}</p>
         </div>
     );
 }
@@ -338,7 +338,7 @@ function DatasetEvidence({ facts }: { facts: Layer1KeyFacts }) {
 
     return (
         <section>
-            <h2 className="mb-4 font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            <h2 className="diag-muted mb-4 font-mono text-xs font-bold uppercase tracking-[0.2em]">
                 Observed Dataset Evidence
             </h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -374,10 +374,10 @@ function EvidencePanel({
     children: ReactNode;
 }) {
     return (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <div className="diag-panel rounded-md border p-4">
             <div className="mb-4 flex items-center gap-2">
-                <Icon className="size-4 text-muted-foreground" />
-                <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                <Icon className="diag-muted size-4" />
+                <h3 className="diag-muted font-mono text-xs font-bold uppercase tracking-widest">
                     {title}
                 </h3>
             </div>
@@ -391,14 +391,14 @@ function EvidencePanel({
 function FailureBreakdown({ failures }: { failures: ValidationCheck[] }) {
     if (failures.length === 0) {
         return (
-            <section className="rounded-lg border border-l-4 border-border border-l-green-500 bg-card p-5 md:p-6">
+            <section className="diag-panel rounded-md border border-l-4 border-l-green-500 p-5 md:p-6">
                 <div className="flex gap-3">
                     <FileCheck2 className="mt-0.5 size-5 shrink-0 text-green-500" />
                     <div>
-                        <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                        <h2 className="diag-muted font-mono text-xs font-bold uppercase tracking-[0.2em]">
                             Failure Breakdown
                         </h2>
-                        <p className="mt-2 text-sm text-foreground">
+                        <p className="diag-text mt-2 text-sm">
                             No failed tests. Dataset passed the structural validation gate.
                         </p>
                     </div>
@@ -409,7 +409,7 @@ function FailureBreakdown({ failures }: { failures: ValidationCheck[] }) {
 
     return (
         <section>
-            <h2 className="mb-4 font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            <h2 className="diag-muted mb-4 font-mono text-xs font-bold uppercase tracking-[0.2em]">
                 Failure Breakdown
             </h2>
             <div className="space-y-3">
@@ -423,30 +423,46 @@ function FailureBreakdown({ failures }: { failures: ValidationCheck[] }) {
 
 function FailureItem({ failure }: { failure: ValidationCheck }) {
     return (
-        <article className="rounded-lg border border-l-4 border-border border-l-red-500 bg-card p-5">
-            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <article className={clsx(
+            "diag-body overflow-hidden rounded-md border border-l-4",
+            failure.impact === "BLOCKER"
+                ? "diag-fail-panel border-l-[#e24b4a]"
+                : "diag-warn-panel border-l-[#d4901a]",
+        )}>
+            <div className={clsx(
+                "flex flex-col gap-2 px-5 py-4 md:flex-row md:items-start md:justify-between",
+                failure.impact === "BLOCKER" ? "diag-fail-header" : "diag-warn-header",
+            )}>
                 <div>
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-red-500">
+                    <p className={clsx(
+                        "font-mono text-[10px] font-bold uppercase tracking-[0.2em]",
+                        failure.impact === "BLOCKER" ? "text-[#e24b4a]" : "text-[#d4901a]",
+                    )}>
                         Failure: {failure.testName}
                     </p>
-                    <h3 className="mt-1 text-lg font-semibold text-foreground">
+                    <h3 className="diag-strong mt-1 text-lg font-semibold">
                         {failure.dimensionLabel}
                     </h3>
                 </div>
-                <span className="w-fit rounded-md border border-border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground">
+                <span className={clsx(
+                    "w-fit rounded border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest",
+                    failure.impact === "BLOCKER"
+                        ? "border-[#e24b4a]/40 bg-[#e24b4a]/10 text-[#ff7775]"
+                        : "border-[#d4901a]/40 bg-[#d4901a]/10 text-[#e9ad43]",
+                )}>
                     {failure.impact}
                 </span>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="diag-body grid gap-4 p-5 md:grid-cols-2">
                 <BreakdownField label="What failed" value={`${failure.observed}; threshold ${failure.threshold}`} />
                 <BreakdownField label="Why it failed" value={failure.reason} />
                 <BreakdownField label="Rule violated" value={failure.rule} />
                 <BreakdownField label="Direct action" value={failure.action} />
             </div>
 
-            <div className="mt-4 rounded-md border border-border bg-background p-3">
-                <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="diag-body border-t p-5 pt-4 [border-color:var(--diag-border)]">
+                <p className="diag-muted mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
                     Exact Offending Columns
                 </p>
                 {failure.offendingColumns.length > 0 ? (
@@ -454,14 +470,14 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
                         {failure.offendingColumns.map((column) => (
                             <span
                                 key={column}
-                                className="rounded-md border border-border px-2 py-1 font-mono text-xs text-foreground"
+                                className="diag-panel rounded border px-2 py-1 font-mono text-xs"
                             >
                                 {column}
                             </span>
                         ))}
                     </div>
                 ) : (
-                    <p className="font-mono text-xs text-muted-foreground">
+                    <p className="diag-muted font-mono text-xs">
                         No single offending column reported; this failure is dataset-level.
                     </p>
                 )}
@@ -472,20 +488,20 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
 
 function ActionLayer({ title, checks }: { title: string; checks: ValidationCheck[] }) {
     return (
-        <section className="rounded-lg border border-l-4 border-border border-l-amber-500 bg-card p-5 md:p-6">
+        <section className="diag-panel rounded-md border border-l-4 border-l-[#d4901a] p-5 md:p-6">
             <div className="mb-4 flex items-center gap-2">
-                <TriangleAlert className="size-4 text-amber-500" />
-                <h2 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                <TriangleAlert className="size-4 text-[#d4901a]" />
+                <h2 className="diag-muted font-mono text-xs font-bold uppercase tracking-[0.2em]">
                     {title}
                 </h2>
             </div>
             <div className="space-y-3">
                 {checks.map((check) => (
-                    <div key={check.id} className="rounded-md border border-border bg-background p-3">
-                        <p className="font-semibold text-foreground">
+                    <div key={check.id} className="diag-row rounded border p-3">
+                        <p className="diag-text font-semibold">
                             {check.dimensionLabel}: {check.testName}
                         </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="diag-muted mt-1 text-sm">
                             {check.optionalAction ?? check.action}
                         </p>
                     </div>
@@ -498,19 +514,19 @@ function ActionLayer({ title, checks }: { title: string; checks: ValidationCheck
 function BreakdownField({ label, value }: { label: string; value: string }) {
     return (
         <div>
-            <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="diag-muted mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
                 {label}
             </p>
-            <p className="text-sm leading-relaxed text-foreground">{value}</p>
+            <p className="diag-text text-sm leading-relaxed">{value}</p>
         </div>
     );
 }
 
 function BannerFact({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-md border border-border bg-background px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-            <p className="mt-1 text-sm font-bold text-foreground">{value}</p>
+        <div className="diag-body rounded border px-3 py-2 [border-color:var(--diag-border)]">
+            <p className="diag-muted text-[10px] uppercase tracking-widest">{label}</p>
+            <p className="diag-strong mt-1 text-sm font-bold">{value}</p>
         </div>
     );
 }
@@ -518,8 +534,8 @@ function BannerFact({ label, value }: { label: string; value: string }) {
 function FactRow({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex items-center justify-between gap-4">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="font-medium text-foreground">{value}</span>
+            <span className="diag-muted">{label}</span>
+            <span className="diag-strong font-sans font-semibold">{value}</span>
         </div>
     );
 }
@@ -527,18 +543,18 @@ function FactRow({ label, value }: { label: string; value: string }) {
 function getDecisionStyles(status: DecisionStatus) {
     if (status === "BLOCKED") {
         return {
-            panel: "border-border border-l-red-500",
-            icon: "text-red-500",
+            panel: "diag-fail-panel border-l-[#e24b4a]",
+            icon: "text-[#e24b4a]",
         };
     }
     if (status === "CONDITIONALLY ALLOWED") {
         return {
-            panel: "border-border border-l-amber-500",
-            icon: "text-amber-500",
+            panel: "diag-warn-panel border-l-[#d4901a]",
+            icon: "text-[#d4901a]",
         };
     }
     return {
-        panel: "border-border border-l-green-500",
+        panel: "border-l-green-500",
         icon: "text-green-500",
     };
 }
@@ -546,18 +562,18 @@ function getDecisionStyles(status: DecisionStatus) {
 function getStatusStyles(status: ValidationStatus) {
     if (status === "FAIL") {
         return {
-            panel: "border-border border-l-red-500",
             icon: "text-red-500",
+            dot: "bg-[#e24b4a] shadow-[0_0_14px_rgba(226,75,74,0.72)] ring-[#e24b4a]/10",
         };
     }
     if (status === "WARNING") {
         return {
-            panel: "border-border border-l-amber-500",
             icon: "text-amber-500",
+            dot: "bg-[#d4901a] shadow-[0_0_14px_rgba(212,144,26,0.64)] ring-[#d4901a]/10",
         };
     }
     return {
-        panel: "border-border border-l-green-500",
         icon: "text-green-500",
+        dot: "bg-green-500 shadow-[0_0_14px_rgba(34,197,94,0.64)] ring-green-500/10",
     };
 }
