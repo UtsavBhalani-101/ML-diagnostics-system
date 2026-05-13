@@ -13,20 +13,78 @@ from engine.Layer_1.schema import SignalExtractionResult, LogicExtractionResult,
 
 logger = logging.getLogger(__name__)
 
+def _build_dimension_dict(
+    *,
+    dimension_signals: list,
+    dominant_risks: dict,
+    additive_risks: dict,
+    total_risk: float,
+    status: str,
+    interpretation: str,
+) -> dict:
+    return {
+        "signals": {s.name: s.value for s in dimension_signals},
+        "dominant_risks": dominant_risks,
+        "additive_risks": additive_risks,
+        "total_risk": round(float(total_risk), 4),
+        "status": status,
+        "primary_issues": [
+            {"name": k, "risk": v, "action": "Investigate"} for k, v in dominant_risks.items()
+        ],
+        "interpretation": interpretation,
+    }
+
+def _overall_risk(overall) -> float:
+    risk = getattr(overall, "composite", None)
+    if risk is None:
+        risk = getattr(overall, "peak_risk", None)
+    return round(float(risk or 0.0), 4)
+
+def _interpretation(dimension_name: str, overall) -> str:
+    status = getattr(overall, "status", "REVIEW")
+    critical = getattr(overall, "critical", []) or []
+    warnings = getattr(overall, "warnings", []) or []
+    errors = getattr(overall, "errors", []) or []
+
+    if errors:
+        return f"{dimension_name} could not be fully evaluated because {', '.join(map(str, errors))} failed."
+    if critical:
+        return f"{dimension_name} has critical structural risk from {', '.join(critical)}."
+    if warnings:
+        return f"{dimension_name} needs review because {', '.join(warnings)} raised warning-level risk."
+    if status == "PROCEED":
+        return f"{dimension_name} checks did not raise material structural risk."
+    return f"{dimension_name} completed with status {status}."
+
+def _build_breakdown(results: list) -> tuple:
+    dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
+    additive = {r.name: r.risk for r in results if 0.0 < r.risk < 0.5 and r.label != "ERROR"}
+    errors = {r.name: 1.0 for r in results if r.label == "ERROR"}
+    if errors:
+        dominant.update(errors)
+    return dominant, additive
+
 def run_logic_extraction(signals: SignalExtractionResult) -> LogicExtractionResult:
     dimensions = {}
     
-    # 1. Data Integrity
-    if "data_integrity" in signals.dimensions:
-        dimensions["data_integrity"] = run_data_integrity_logic(signals.dimensions["data_integrity"])
+    mapping = {
+        "data_integrity": ("Data Integrity", run_data_integrity_logic),
+        "sample_adequacy": ("Sample Adequacy", run_sample_adequacy_logic),
+        "target_validity": ("Target Validity", run_target_validity_logic),
+    }
 
-    # 2. Sample Adequacy
-    if "sample_adequacy" in signals.dimensions:
-        dimensions["sample_adequacy"] = run_sample_adequacy_logic(signals.dimensions["sample_adequacy"])
-
-    # 3. Target Validity
-    if "target_validity" in signals.dimensions:
-        dimensions["target_validity"] = run_target_validity_logic(signals.dimensions["target_validity"])
+    for key, (label, run_func) in mapping.items():
+        if key in signals.dimensions:
+            results, overall = run_func(signals.dimensions[key])
+            dom, add = _build_breakdown(results)
+            dimensions[key] = _build_dimension_dict(
+                dimension_signals=signals.dimensions[key],
+                dominant_risks=dom,
+                additive_risks=add,
+                total_risk=_overall_risk(overall),
+                status=overall.status,
+                interpretation=_interpretation(label, overall),
+            )
 
     return LogicExtractionResult(dimensions=dimensions)
 
