@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import logging
-from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import List, Dict
+from engine.Layer_1.schema import Signal_Structure
+
 
 FAILURE_MODES = {
     "existence" : "target not present --> _____ (missing)",
@@ -16,23 +17,12 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-# ------------------ STRUCTURE ------------------
-
-@dataclass(frozen=True)
-class Structure:
-    dimension: str
-    name: str
-    value: Any
-    status: str  # "ok", "no_value", "error"
-    meta: Dict[str, Any]
-
-
-DIMENSION = "target_viability"
+DIMENSION = "target_validity"
 
 
 # ------------------ ENFORCEMENT ------------------
 
-def enforce(signal: Structure):
+def enforce(signal: Signal_Structure):
     if signal.status == "ok" and signal.value is None:
         raise ValueError(f"{signal.name}: status ok but value is None")
 
@@ -93,8 +83,8 @@ def validate_target(y: pd.Series) -> Dict:
 # ------------------ SIGNALS ------------------
 
 # get number of rows
-def target_shape(y: pd.Series) -> Structure:
-    signal = Structure(
+def target_shape(y: pd.Series) -> Signal_Structure:
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="target_shape",
         value={"rows": len(y), "cols": 1},
@@ -107,10 +97,10 @@ def target_shape(y: pd.Series) -> Structure:
 
 
 # get standard (np.nan) missing count
-def target_missing_ratio(y: pd.Series) -> Structure:
+def target_missing_ratio(y: pd.Series) -> Signal_Structure:
     ratio = float(y.isna().mean())
 
-    signal = Structure(
+    signal = Signal_Structure(
             dimension=DIMENSION,
             name="target_missing_ratio",
             value=ratio,
@@ -125,11 +115,11 @@ def target_missing_ratio(y: pd.Series) -> Structure:
     return signal
 
 # is target useless ? (does it only contain 1 unique value ?)
-def target_degeneracy_flag(y: pd.Series) -> Structure:
+def target_degeneracy_flag(y: pd.Series) -> Signal_Structure:
     unique = int(y.dropna().nunique())
     is_degenerate = unique <= 1
 
-    signal = Structure(
+    signal = Signal_Structure(
             dimension=DIMENSION,
             name="target_degeneracy_flag",
             value=is_degenerate,
@@ -141,7 +131,7 @@ def target_degeneracy_flag(y: pd.Series) -> Structure:
     return signal
 
 # get the dominant class (index[0]) ratio
-def dominant_class_ratio(y: pd.Series) -> Structure:
+def dominant_class_ratio(y: pd.Series) -> Signal_Structure:
     counts = y.value_counts(normalize=True)
 
     ratio = float(counts.iloc[0])
@@ -157,7 +147,7 @@ def dominant_class_ratio(y: pd.Series) -> Structure:
         class_dist = {str(k): round(float(v), 4) for k, v in top.items()}
         class_dist["_other"] = round(float(1.0 - top.sum()), 4)
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="dominant_class_ratio",
         value=ratio,
@@ -176,9 +166,9 @@ def dominant_class_ratio(y: pd.Series) -> Structure:
 
 
 # get how predictable the data points are
-def target_entropy(y: pd.Series) -> Structure:
+def target_entropy(y: pd.Series) -> Signal_Structure:
     if y.dropna().empty:
-        return Structure(
+        return Signal_Structure(
             dimension=DIMENSION,
             name="target_entropy",
             value=None,
@@ -189,7 +179,7 @@ def target_entropy(y: pd.Series) -> Structure:
     p = y.value_counts(normalize=True)
     entropy = float(-np.sum(p * np.log2(p + 1e-9)))
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="target_entropy",
         value=entropy,
@@ -204,13 +194,13 @@ def target_entropy(y: pd.Series) -> Structure:
     return signal
 
 # how badly the target is mixed with different dtypes 
-def type_contamination_ratio(y: pd.Series) -> Structure:
+def type_contamination_ratio(y: pd.Series) -> Signal_Structure:
     
     # 1. drop null values 
     non_null = y.dropna()
 
     if len(non_null) == 0:
-        return Structure(
+        return Signal_Structure(
             dimension=DIMENSION,
             name="type_contamination_ratio",
             value=None,
@@ -229,7 +219,7 @@ def type_contamination_ratio(y: pd.Series) -> Structure:
     
     type_counts = types.value_counts()
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="type_contamination_ratio",
         value=contamination,
@@ -271,7 +261,7 @@ REQUIRED_SIGNALS = {
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
+def run_target_validity_signals(y: pd.Series, col_name: str) -> List[Signal_Structure]:
 
     # 1. get clean y
     y_clean = clean_target(y)
@@ -281,7 +271,7 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
 
     if validation["status"] == "fail":
         return [
-            Structure(
+            Signal_Structure(
                 dimension=DIMENSION,
                 name="target_validation",
                 value=None,
@@ -291,7 +281,7 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
         ]
         
     #3. get target col name before running the registry loop
-    name_signal = Structure(
+    name_signal = Signal_Structure(
         dimension=DIMENSION,
         name="target_column_name",
         value=col_name,
@@ -319,7 +309,7 @@ def run_target_sanity(y: pd.Series, col_name: str) -> List[Structure]:
             })
 
             results.append(
-                Structure(
+                Signal_Structure(
                     dimension=DIMENSION,
                     name=signal_fn.__name__,
                     value=None,
@@ -339,7 +329,7 @@ if __name__ == "__main__":
     target_col = df['Ticket']
 
     print("--- Running Target Signals ---")
-    results = run_target_sanity(target_col, 'Ticket')
+    results = run_target_sanity_signals(target_col, 'Ticket')
     
     for res in results:
         # print(f"{res.name}:")

@@ -2,23 +2,13 @@ import math
 import numpy as np
 import pandas as pd
 import logging
-from dataclasses import dataclass
-from typing import Any, Dict, List
+from engine.Layer_1.schema import Signal_Structure
+from typing import List
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-
-# ------------------ STRUCTURE ------------------
-
-@dataclass(frozen=True)
-class Structure:
-    dimension: str
-    name: str
-    value: Any
-    status: str  # "ok", "no_value", "error"
-    meta: Dict[str, Any]
 
 
 DIMENSION = "data_integrity"
@@ -50,7 +40,7 @@ def _contains_nan_or_inf(value) -> bool:
     return False
 
 
-def enforce(signal: Structure):
+def enforce(signal: Signal_Structure):
     if signal.status == "ok" and signal.value is None:
         raise ValueError(f"{signal.name}: ok but value is None")
 
@@ -79,10 +69,10 @@ def validate_data(df: pd.DataFrame):
 
 # ------------------ SIGNALS ------------------
 
-def dataset_shape(df: pd.DataFrame) -> Structure:
+def dataset_shape(df: pd.DataFrame) -> Signal_Structure:
     rows, cols = df.shape
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="dataset_shape",
         value={"rows": int(rows), "cols": int(cols)},
@@ -93,12 +83,12 @@ def dataset_shape(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def global_missing_ratio(df: pd.DataFrame) -> Structure:
+def global_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
     total = df.shape[0] * df.shape[1]
 
     ratio = float(df.isna().sum().sum() / total)
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="global_missing_ratio",
         value=ratio,
@@ -109,12 +99,12 @@ def global_missing_ratio(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def column_missing_ratio(df: pd.DataFrame) -> Structure:
+def column_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
 
     ratios = df.isna().mean().to_dict()
     worst = max(ratios.values())
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="column_missing_ratio",
         value={"per_column": ratios, "worst_ratio": worst},
@@ -125,13 +115,13 @@ def column_missing_ratio(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def duplicated_ratio(df: pd.DataFrame) -> Structure:
+def duplicated_ratio(df: pd.DataFrame) -> Signal_Structure:
     
     df_norm = _normalize_hidden_missing(df)
     df_copy = df_norm.fillna("__MISSING__")
     ratio = float(df_copy.duplicated().mean())
     
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="duplicated_ratio",
         value=ratio,
@@ -142,14 +132,14 @@ def duplicated_ratio(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def constant_columns_ratio(df: pd.DataFrame) -> Structure:
+def constant_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
     
     df_norm = _normalize_hidden_missing(df)
 
     const_cols = df_norm.columns[df_norm.nunique(dropna=True) <= 1]
     ratio = float(len(const_cols) / df.shape[1])
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="constant_columns_ratio",
         value={"columns": list(const_cols), "ratio": ratio},
@@ -160,11 +150,11 @@ def constant_columns_ratio(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
+def hidden_missing_ratio(df: pd.DataFrame) -> Signal_Structure:
     obj_cols = df.select_dtypes(include="object")
 
     if len(obj_cols.columns) == 0:
-        return Structure(
+        return Signal_Structure(
             dimension=DIMENSION,
             name="hidden_missing_ratio",
             value=None,
@@ -181,7 +171,7 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
         ratios[col] = r
         worst = max(worst, r)
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="hidden_missing_ratio",
         value={"ratios": ratios, "worst_ratio": worst},
@@ -193,13 +183,13 @@ def hidden_missing_ratio(df: pd.DataFrame) -> Structure:
     return signal
 
 
-def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
+def mixed_type_columns_ratio(df: pd.DataFrame) -> Signal_Structure:
 
     ignore = {"na", "n/a", "null", "none", "unknown", "?", "-", "", " "}
     obj_cols = df.select_dtypes(include="object")
 
     if len(obj_cols.columns) == 0:
-        return Structure(
+        return Signal_Structure(
             dimension=DIMENSION,
             name="mixed_type_columns_ratio",
             value=None,
@@ -220,7 +210,7 @@ def mixed_type_columns_ratio(df: pd.DataFrame) -> Structure:
 
     ratio = len(mixed) / len(obj_cols.columns)
 
-    signal = Structure(
+    signal = Signal_Structure(
         dimension=DIMENSION,
         name="mixed_type_columns_ratio",
         value={"columns": mixed, "ratio": ratio},
@@ -255,13 +245,13 @@ REQUIRED_SIGNALS = {
 }
 
 
-def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
+def run_data_integrity_signals(df: pd.DataFrame) -> List[Signal_Structure]:
 
     validation = validate_data(df)
 
     if validation["status"] == "fail":
         return [
-            Structure(
+            Signal_Structure(
                 dimension=DIMENSION,
                 name="data_validation",
                 value=None,
@@ -277,7 +267,7 @@ def run_signal_extraction(df: pd.DataFrame) -> List[Structure]:
             results.append(fn(df))
         except Exception as e:
             results.append(
-                Structure(
+                Signal_Structure(
                     dimension=DIMENSION,
                     name=fn.__name__,
                     value=None,
@@ -306,7 +296,7 @@ if __name__ == "__main__":
     df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
     
     
-    results = run_signal_extraction(df)
+    results = run_data_integrity_signals(df)
     for r in results:
         print(r)
     
