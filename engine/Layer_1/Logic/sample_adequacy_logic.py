@@ -1,10 +1,10 @@
 
 import numpy as np
 import logging
-from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict
 
-from engine.Layer_1.Signals.sample_adequacy_signals import Structure, REQUIRED_SIGNALS
+from engine.Layer_1.schema import Signal_Structure, Logic_Structure, Logic_OverallResult
+from engine.Layer_1.Signals.sample_adequacy_signals import REQUIRED_SIGNALS
 
 # ------------------ ASSUMPTIONS ------------------
 
@@ -24,33 +24,9 @@ logger = logging.getLogger(__name__)
 
 DIMENSION = "sample_adequacy"
 
-
-# ------------------ RESULT STRUCTURES ------------------
-
-@dataclass(frozen=True)
-class TestResult:
-    dimension: str
-    name: str
-    label: str
-    risk: float
-    metrics: Optional[Dict]
-
-
-@dataclass(frozen=True)
-class OverallResult:
-    dimension: str
-    status: str
-    peak_risk : float | None
-    severity_score : float | None
-    composite : float | None
-    critical: List[str]    # names of CRITICAL signals
-    warnings: List[str]    # names of WARNING signals
-    safe: List[str]        # names of SAFE signals
-    errors: List[str]      # names of ERROR signals
-
 # ------------------ SIGNAL ACCESS ------------------
 
-def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
+def build_signal_map(signals: List[Signal_Structure]) -> Dict[str, Signal_Structure]:
     signal_map = {}
     for s in signals:
         if s.name in signal_map:
@@ -59,7 +35,7 @@ def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
     return signal_map
 
 
-def get_value(signal_map: Dict[str, Structure], name: str):
+def get_value(signal_map: Dict[str, Signal_Structure], name: str):
     s = signal_map[name]
 
     if s.status != "ok":
@@ -71,7 +47,7 @@ def get_value(signal_map: Dict[str, Structure], name: str):
 
 # ------------------ CONTRACT VALIDATION ------------------
 
-def validate_signals_contract(signal_map: Dict[str, Structure]):
+def validate_signals_contract(signal_map: Dict[str, Signal_Structure]):
     for name, expected_type in REQUIRED_SIGNALS.items():
         s = signal_map.get(name)
 
@@ -85,7 +61,7 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 
 # ------------------ LOGIC FUNCTIONS ------------------
 
-def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def duplicated_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["duplicated_ratio"]
     ratio = get_value(signal_map, "duplicated_ratio")
     
@@ -96,7 +72,7 @@ def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="duplicated_risk",
         label=label,
@@ -108,10 +84,10 @@ def duplicated_risk(signal_map: Dict[str, Structure]) -> TestResult:
         }
     )
 
-def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def effective_sample_size_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["effective_sample_size"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="effective_sample_size_risk",
             label="CRITICAL",
@@ -129,7 +105,7 @@ def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="effective_sample_size_risk",
         label=label,
@@ -142,10 +118,10 @@ def effective_sample_size_risk(signal_map: Dict[str, Structure]) -> TestResult:
         }
     )
 
-def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def sample_dependency_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["sample_dependency_score"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="sample_dependency_risk",
             label="CRITICAL",
@@ -163,7 +139,7 @@ def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="sample_dependency_risk",
         label=label,
@@ -176,10 +152,10 @@ def sample_dependency_risk(signal_map: Dict[str, Structure]) -> TestResult:
     )
 
 
-def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def feature_variance_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["feature_variance_score"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="feature_variance_risk",
             label="SAFE",
@@ -197,7 +173,7 @@ def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="feature_variance_risk",
         label=label,
@@ -211,10 +187,10 @@ def feature_variance_risk(signal_map: Dict[str, Structure]) -> TestResult:
         }
     )
 
-def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def marginal_coverage_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["marginal_coverage"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="marginal_coverage_risk",
             label="CRITICAL",
@@ -232,7 +208,7 @@ def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="marginal_coverage_risk",
         label=label,
@@ -245,13 +221,13 @@ def marginal_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
         }
     )
 
-def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def joint_coverage_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["joint_coverage"]
     if signal.status == "no_value":
         reason = str(signal.meta.get("reason", ""))
         risk = 0.0 if "insufficient features" in reason else 0.5
         label = "SAFE" if risk == 0.0 else "WARNING"
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="joint_coverage_risk",
             label=label,
@@ -269,7 +245,7 @@ def joint_coverage_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
         
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="joint_coverage_risk",
         label=label,
@@ -298,12 +274,12 @@ LOGIC_REGISTRY = [
 
 LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
 
-def aggregate_risk(results: List[TestResult]) -> OverallResult:
+def aggregate_risk(results: List[Logic_Structure]) -> Logic_OverallResult:
     valid = [r for r in results if r.label in LABEL_SCORE]
     errors = [r.name for r in results if r.label not in LABEL_SCORE]
 
     if not valid:
-        return OverallResult(
+        return Logic_OverallResult(
             dimension=DIMENSION,
             status="REVIEW",
             peak_risk=None,
@@ -336,7 +312,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     # severity tells you how widespread it is
     composite = round((0.6 * peak_risk + 0.4 * severity_score) , 4)
     
-    return OverallResult(
+    return Logic_OverallResult(
         dimension=DIMENSION,
         status=status,
         peak_risk=peak_risk,
@@ -350,7 +326,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_sample_adequacy_logic(signals: List[Structure]):
+def run_sample_adequacy_logic(signals: List[Signal_Structure]):
     
     
     # 1. build signals map
@@ -358,7 +334,7 @@ def run_sample_adequacy_logic(signals: List[Structure]):
 
     # 2. verify status of signals and allow only valid signals
     if "data_validation" in signal_map and signal_map["data_validation"].status == "error":
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="data_validation",
             label="ERROR",
@@ -371,7 +347,7 @@ def run_sample_adequacy_logic(signals: List[Structure]):
     try:
         validate_signals_contract(signal_map)
     except (ValueError, TypeError) as e:
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="contract_validation",
             label="ERROR",
@@ -389,7 +365,7 @@ def run_sample_adequacy_logic(signals: List[Structure]):
             results.append(fn(signal_map))
         except Exception as e:
             results.append(
-                TestResult(
+                Logic_Structure(
                     dimension=DIMENSION,
                     name=fn.__name__,
                     label="ERROR",
@@ -406,12 +382,12 @@ def run_sample_adequacy_logic(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension='sample_adequacy', name='duplicated_ratio', value=0.0, status='ok', meta={'n': 891}),
-        Structure(dimension='sample_adequacy', name='effective_sample_size', value=2.8023705022704237, status='ok', meta={'avg_nn_distance': 2.8023705022704237}),
-        Structure(dimension='sample_adequacy', name='sample_dependency_score', value=11.466907040283509, status='ok', meta={'avg_step_distance': 11.466907040283509}),
-        Structure(dimension='sample_adequacy', name='feature_variance_score', value=0.07142857142857142, status='ok', meta={'low_variance_ratio': 0.07142857142857142}),
-        Structure(dimension='sample_adequacy', name='marginal_coverage', value=0.31428571428571417, status='ok', meta={'avg_bin_coverage': 0.31428571428571417}),
-        Structure(dimension='sample_adequacy', name='joint_coverage', value=1.0, status='ok', meta={'grid_fill': 1.0})
+        Signal_Structure(dimension='sample_adequacy', name='duplicated_ratio', value=0.0, status='ok', meta={'n': 891}),
+        Signal_Structure(dimension='sample_adequacy', name='effective_sample_size', value=2.8023705022704237, status='ok', meta={'avg_nn_distance': 2.8023705022704237}),
+        Signal_Structure(dimension='sample_adequacy', name='sample_dependency_score', value=11.466907040283509, status='ok', meta={'avg_step_distance': 11.466907040283509}),
+        Signal_Structure(dimension='sample_adequacy', name='feature_variance_score', value=0.07142857142857142, status='ok', meta={'low_variance_ratio': 0.07142857142857142}),
+        Signal_Structure(dimension='sample_adequacy', name='marginal_coverage', value=0.31428571428571417, status='ok', meta={'avg_bin_coverage': 0.31428571428571417}),
+        Signal_Structure(dimension='sample_adequacy', name='joint_coverage', value=1.0, status='ok', meta={'grid_fill': 1.0})
     ]
 
     results, overall = run_sample_adequacy_logic(mock_signals)

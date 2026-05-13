@@ -52,7 +52,7 @@ type SignalMap = Record<string, unknown>;
 
 const DIMENSION_LABELS: Record<keyof Layer1FinalOutput["dimensions"], string> = {
     data_integrity: "Data Integrity",
-    target_viability: "Target Viability",
+    target_validity: "Target Validity",
     sample_adequacy: "Sample Adequacy",
 };
 
@@ -262,7 +262,7 @@ function dataIntegrityChecks(dimension: DimensionResult): ValidationCheck[] {
     ];
 }
 
-function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
+function targetValidityChecks(dimension: DimensionResult): ValidationCheck[] {
     const signals = dimension.signals;
     const targetMissing = getNumber(signals, ["target_missing_ratio"], 0);
     const isDegenerate = getBoolean(signals, "target_degeneracy_flag");
@@ -277,8 +277,8 @@ function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
 
     return [
         makeCheck({
-            id: "target_viability.target_missing",
-            dimensionKey: "target_viability",
+            id: "target_validity.target_missing",
+            dimensionKey: "target_validity",
             testName: "Target Missingness",
             status: statusByUpperBounds(targetMissing, 0.1, 0.4),
             observed: formatPercent(targetMissing),
@@ -291,8 +291,8 @@ function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
             offendingColumns: [],
         }),
         makeCheck({
-            id: "target_viability.degeneracy",
-            dimensionKey: "target_viability",
+            id: "target_validity.degeneracy",
+            dimensionKey: "target_validity",
             testName: "Target Degeneracy",
             status: isDegenerate ? "FAIL" : "PASS",
             observed: isDegenerate ? "Degenerate target" : "Target has multiple values",
@@ -304,8 +304,8 @@ function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
             offendingColumns: [],
         }),
         makeCheck({
-            id: "target_viability.class_imbalance",
-            dimensionKey: "target_viability",
+            id: "target_validity.class_imbalance",
+            dimensionKey: "target_validity",
             testName: "Class Imbalance",
             status: statusByUpperBounds(dominantClassRatio, 0.8, 0.95),
             observed: `${formatPercent(dominantClassRatio)} majority class`,
@@ -318,8 +318,8 @@ function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
             offendingColumns: [],
         }),
         makeCheck({
-            id: "target_viability.entropy",
-            dimensionKey: "target_viability",
+            id: "target_validity.entropy",
+            dimensionKey: "target_validity",
             testName: "Target Entropy",
             status: statusByLowerBounds(normalizedEntropy, 0.5, 0.8),
             observed: `${formatPercent(normalizedEntropy)} normalized entropy`,
@@ -332,8 +332,8 @@ function targetViabilityChecks(dimension: DimensionResult): ValidationCheck[] {
             offendingColumns: [],
         }),
         makeCheck({
-            id: "target_viability.type_contamination",
-            dimensionKey: "target_viability",
+            id: "target_validity.type_contamination",
+            dimensionKey: "target_validity",
             testName: "Target Type Contamination",
             status: statusByUpperBounds(contaminationRatio, 0.05, 0.1),
             observed: formatPercent(contaminationRatio),
@@ -484,10 +484,10 @@ export function buildLayer1ValidationModel(
             checks: sortChecks(dataIntegrityChecks(dimensions.data_integrity)),
         },
         {
-            key: "target_viability",
-            label: DIMENSION_LABELS.target_viability,
+            key: "target_validity",
+            label: DIMENSION_LABELS.target_validity,
             description: "Target existence, consistency, and learnability checks.",
-            checks: sortChecks(targetViabilityChecks(dimensions.target_viability)),
+            checks: sortChecks(targetValidityChecks(dimensions.target_validity)),
         },
         {
             key: "sample_adequacy",

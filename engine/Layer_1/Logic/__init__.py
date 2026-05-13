@@ -1,200 +1,67 @@
 """
 Logic orchestrator for Layer 1.
 
-Exposes evaluate_* functions that the pipeline calls.
-Each function takes a flat signal dict and returns a dimension dict
-matching the formatter's expected structure:
-  {
-    "signals": { ... },
-    "dominant_risks": { ... },
-    "additive_risks": { ... },
-    "total_risk": float,
-    "status": str,
-    "primary_issues": [{ "name": str, "risk": float, "action": str }],
-    "interpretation": str
-  }
+Aggregates all logic modules and produces a structured result
+containing risks and overall status for each dimension.
 """
 import logging
 
 from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity_logic
-from engine.Layer_1.Logic.target_sanity_logic import run_target_sanity_logic
+from engine.Layer_1.Logic.target_validity_logic import run_target_validity_logic
 from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy_logic
-from engine.Layer_1.primary_issues import generate_primary_issues
+from engine.Layer_1.schema import SignalExtractionResult, LogicExtractionResult, Signal_Structure
 
 logger = logging.getLogger(__name__)
 
-
-def _build_dimension_dict(
-    *,
-    dimension_signals: dict,
-    dominant_risks: dict,
-    additive_risks: dict,
-    total_risk: float,
-    status: str,
-    interpretation: str,
-) -> dict:
-    dimension = {
-        "signals": dimension_signals,
-        "dominant_risks": dominant_risks,
-        "additive_risks": additive_risks,
-        "total_risk": round(float(total_risk), 4),
-        "status": status,
-        "primary_issues": generate_primary_issues(dominant_risks),
-        "interpretation": interpretation,
-    }
-
-    required = {
-        "signals",
-        "dominant_risks",
-        "additive_risks",
-        "total_risk",
-        "status",
-        "primary_issues",
-        "interpretation",
-    }
-    missing = required.difference(dimension)
-    if missing:
-        raise ValueError(
-            f"Incomplete Layer 1 dimension output: missing {sorted(missing)}"
-        )
-
-    return dimension
-
-
-def _overall_risk(overall) -> float:
-    """Use the new Layer 1 aggregate score, falling back to peak risk for errors."""
-    risk = getattr(overall, "composite", None)
-    if risk is None:
-        risk = getattr(overall, "peak_risk", None)
-    return round(float(risk or 0.0), 4)
-
-
-def _interpretation(dimension_name: str, overall) -> str:
-    status = getattr(overall, "status", "REVIEW")
-    critical = getattr(overall, "critical", []) or []
-    warnings = getattr(overall, "warnings", []) or []
-    errors = getattr(overall, "errors", []) or []
-
-    if errors:
-        return f"{dimension_name} could not be fully evaluated because {', '.join(map(str, errors))} failed."
-    if critical:
-        return f"{dimension_name} has critical structural risk from {', '.join(critical)}."
-    if warnings:
-        return f"{dimension_name} needs review because {', '.join(warnings)} raised warning-level risk."
-    if status == "PROCEED":
-        return f"{dimension_name} checks did not raise material structural risk."
-    return f"{dimension_name} completed with status {status}."
-
-
-def _build_breakdown(results: list) -> tuple:
-    dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
-    additive = {r.name: r.risk for r in results if 0.0 < r.risk < 0.5 and r.label != "ERROR"}
+def run_logic_extraction(signals: SignalExtractionResult) -> LogicExtractionResult:
+    dimensions = {}
     
-    # ensure any ERROR states are marked somehow, or just excluded from breakdown
-    # If they failed, their risk is 1.0 but they are not 'dominant' structural risks, they are errors.
-    errors = {r.name: 1.0 for r in results if r.label == "ERROR"}
-    if errors:
-        dominant.update(errors)
-        
-    return dominant, additive
+    # 1. Data Integrity
+    if "data_integrity" in signals.dimensions:
+        dimensions["data_integrity"] = run_data_integrity_logic(signals.dimensions["data_integrity"])
+
+    # 2. Sample Adequacy
+    if "sample_adequacy" in signals.dimensions:
+        dimensions["sample_adequacy"] = run_sample_adequacy_logic(signals.dimensions["sample_adequacy"])
+
+    # 3. Target Validity
+    if "target_validity" in signals.dimensions:
+        dimensions["target_validity"] = run_target_validity_logic(signals.dimensions["target_validity"])
+
+    return LogicExtractionResult(dimensions=dimensions)
 
 
-def evaluate_data_integrity(structures: list, flat_signals: dict) -> dict:
-    """Evaluate data integrity dimension."""
-    logger.info("Evaluating data_integrity dimension")
-
-    dim_signals = {
-        k: flat_signals[k] for k in [
-            "rows", "cols",
-            "global_missing_ratio", "column_missing_ratio",
-            "duplicated_ratio", "duplicate_ratio", "constant_columns", "constant_ratio",
-            "hidden_missing_ratio", "mixed_type_columns", "mixed_ratio"
-        ] if k in flat_signals
-    }
-
-    dim_structs = [s for s in structures if s.dimension == "data_integrity"]
-    results, overall = run_data_integrity_logic(dim_structs)
-    dominant_risks, additive_risks = _build_breakdown(results)
-
-    return _build_dimension_dict(
-        dimension_signals=dim_signals,
-        dominant_risks=dominant_risks,
-        additive_risks=additive_risks,
-        total_risk=_overall_risk(overall),
-        status=overall.status,
-        interpretation=_interpretation("Data integrity", overall),
+if __name__ == "__main__":
+    mock_signals = SignalExtractionResult(
+        dimensions={
+            'data_integrity': [
+                Signal_Structure(dimension='data_integrity', name='dataset_shape', value={'rows': 891, 'cols': 12}, status='ok', meta={'total_cells': 10692}),
+                Signal_Structure(dimension='data_integrity', name='global_missing_ratio', value=0.08099513655069211, status='ok', meta={'total_cells': 10692}),
+                Signal_Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'PassengerId': 0.0, 'Survived': 0.0, 'Pclass': 0.0, 'Name': 0.0, 'Sex': 0.0, 'Age': 0.19865319865319866, 'SibSp': 0.0, 'Parch': 0.0, 'Ticket': 0.0, 'Fare': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_columns': 12}),
+                Signal_Structure(dimension='data_integrity', name='duplicated_ratio', value=0.0, status='ok', meta={'num_rows': 891}),
+                Signal_Structure(dimension='data_integrity', name='constant_columns_ratio', value={'columns': [], 'ratio': 0.0}, status='ok', meta={'total_columns': 12}),
+                Signal_Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'Name': 0.0, 'Sex': 0.0, 'Ticket': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_object_columns': 5}),
+                Signal_Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': ['Ticket'], 'ratio': 0.2}, status='ok', meta={'num_object_columns': 5})
+            ],
+            'sample_adequacy': [
+                Signal_Structure(dimension='sample_adequacy', name='duplicated_ratio', value=0.0, status='ok', meta={'total_rows': 891, 'duplicate_rows': 0, 'unique_rows': 891}),
+                Signal_Structure(dimension='sample_adequacy', name='effective_sample_size', value=2.8023705022704237, status='ok', meta={'avg_nn_distance': 2.8023705022704237, 'sample_size_used': 500, 'total_rows': 891, 'feature_count': 14}),
+                Signal_Structure(dimension='sample_adequacy', name='sample_dependency_score', value=11.466907040283509, status='ok', meta={'avg_step_distance': 11.466907040283509, 'total_rows': 891, 'feature_count': 14}),
+                Signal_Structure(dimension='sample_adequacy', name='feature_variance_score', value=0.07142857142857142, status='ok', meta={'low_variance_ratio': 0.07142857142857142, 'low_variance_columns': ['Sex_nan'], 'low_variance_count': 1, 'total_features': 14, 'threshold_used': 0.0002326233622113772}),
+                Signal_Structure(dimension='sample_adequacy', name='marginal_coverage', value=0.31428571428571417, status='ok', meta={'avg_bin_coverage': 0.31428571428571417, 'per_column_coverage': {'PassengerId': 1.0, 'Survived': 0.1, 'Pclass': 0.2, 'Age': 1.0, 'SibSp': 0.2, 'Parch': 0.3, 'Fare': 1.0, 'Sex_female': 0.1, 'Sex_male': 0.1, 'Sex_nan': 0.0, 'Embarked_C': 0.1, 'Embarked_Q': 0.1, 'Embarked_S': 0.1, 'Embarked_nan': 0.1}, 'bins_used': 10, 'columns_evaluated': 14}),
+                Signal_Structure(dimension='sample_adequacy', name='joint_coverage', value=1.0, status='ok', meta={'grid_fill': 1.0, 'columns_used': ['PassengerId', 'Fare'], 'bins_used': 5, 'filled_cells': 25, 'total_cells': 25})
+            ],
+            'target_validity': [
+                Signal_Structure(dimension='target_validity', name='target_column_name', value='Survived', status='ok', meta={'dtype': 'int64'}),
+                Signal_Structure(dimension='target_validity', name='target_shape', value={'rows': 891, 'cols': 1}, status='ok', meta={'n_samples': 891}),
+                Signal_Structure(dimension='target_validity', name='target_missing_ratio', value=0.0, status='ok', meta={'n_samples': 891, 'missing_count': 0}),
+                Signal_Structure(dimension='target_validity', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 2}),
+                Signal_Structure(dimension='target_validity', name='dominant_class_ratio', value=0.6161616161616161, status='ok', meta={'n_samples': 891, 'dominant_class': '0', 'dominant_count': 549, 'total_unique': 2, 'class_distribution': {'0': 0.6162, '1': 0.3838}}),
+                Signal_Structure(dimension='target_validity', name='target_entropy', value=0.9607078989902569, status='ok', meta={'num_classes': 2, 'max_entropy': 1.0}),
+                Signal_Structure(dimension='target_validity', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'int', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'int': 891}})
+            ]
+        }
     )
-
-
-def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
-    """Evaluate target viability dimension."""
-    logger.info("Evaluating target_viability dimension")
-
-    dim_signals = {
-        k: flat_signals.get(k) for k in [
-            "target_column_name", "target_rows",
-            "target_missing_ratio", "target_degeneracy_flag",
-            "dominant_class_ratio", "target_entropy",
-            "type_contamination_ratio", "dataset_shape", "task_confidence"
-        ] if k in flat_signals
-    }
-
-    dim_structs = [s for s in structures if s.dimension == "target_viability"]
-    if not dim_structs:
-        return _build_dimension_dict(
-            dimension_signals=dim_signals,
-            dominant_risks={},
-            additive_risks={},
-            total_risk=0.0,
-            status="PROCEED",
-            interpretation="Target viability checks were skipped because no target column was provided.",
-        )
-
-    try:
-        results, overall, _signal_map = run_target_sanity_logic(dim_structs)
-        dominant_risks, additive_risks = _build_breakdown(results)
-
-        return _build_dimension_dict(
-            dimension_signals=dim_signals,
-            dominant_risks=dominant_risks,
-            additive_risks=additive_risks,
-            total_risk=_overall_risk(overall),
-            status=overall.status,
-            interpretation=_interpretation("Target viability", overall),
-        )
-    except Exception as e:
-        logger.warning(f"Target viability evaluation failed: {e}, defaulting to SAFE")
-        return _build_dimension_dict(
-            dimension_signals=dim_signals,
-            dominant_risks={},
-            additive_risks={},
-            total_risk=0.0,
-            status="SAFE",
-            interpretation="Target checks were unavailable, so no structural target risk was raised.",
-        )
-
-
-def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
-    """Evaluate sample adequacy dimension."""
-    logger.info("Evaluating sample_adequacy dimension")
-
-    dim_signals = {
-        k: flat_signals.get(k) for k in [
-            "duplicated_ratio", "effective_sample_size", "effective_sample_score",
-            "sample_dependency_score","feature_variance_score", 
-            "marginal_coverage", "joint_coverage"
-        ] if k in flat_signals
-    }
-
-    dim_structs = [s for s in structures if s.dimension == "sample_adequacy"]
-    results, overall = run_sample_adequacy_logic(dim_structs)
-    dominant_risks, additive_risks = _build_breakdown(results)
-
-    return _build_dimension_dict(
-        dimension_signals=dim_signals,
-        dominant_risks=dominant_risks,
-        additive_risks=additive_risks,
-        total_risk=_overall_risk(overall),
-        status=overall.status,
-        interpretation=_interpretation("Sample adequacy", overall),
-    )
+    output = run_logic_extraction(mock_signals)
+    
+    print(output)

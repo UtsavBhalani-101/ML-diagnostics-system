@@ -93,7 +93,7 @@ Performs dataset-level integrity analysis independent of target selection.
 **Evaluates:**
 
 - Data Integrity: missingness, duplicates, constant columns, hidden missing values, mixed types
-- Target Viability: missing labels, target variability, class imbalance, task inference
+- Target Validity: missing labels, target variability, class imbalance, task inference
 - Sample Adequacy: sample-to-feature ratio, small-sample and overfitting risk
 
 Produces structured findings with severity:

@@ -10,15 +10,9 @@ import logging
 from engine.Layer_1.Signals.data_integrity_signals import run_data_integrity_signals
 from engine.Layer_1.Signals.sample_adequacy_signals import run_sample_adequacy_signals
 from engine.Layer_1.Signals.target_validity_signals import run_target_validity_signals
-from engine.Layer_1.schema import Signal_Structure, SignalExtractionResult
-
-from dataclasses import dataclass
-from typing import Dict, List
+from engine.Layer_1.schema import SignalExtractionResult
 
 logger = logging.getLogger(__name__)
-
-
-
 
 
 def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) -> SignalExtractionResult:
@@ -30,7 +24,8 @@ def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) ->
     
     if target_column and target_column in df.columns:
         y = df[target_column]
-        dimensions["target_validity"] = run_target_validity_signals(y, target_column)
+        if isinstance(y, pd.Series):
+            dimensions["target_validity"] = run_target_validity_signals(y, target_column)
     
     return SignalExtractionResult(dimensions=dimensions)
     

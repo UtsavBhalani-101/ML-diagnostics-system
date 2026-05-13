@@ -1,12 +1,9 @@
-
-from dataclasses import dataclass
-import numpy as np
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
-from engine.Layer_1.Signals.data_integrity_signals import Structure, REQUIRED_SIGNALS
-
+from engine.Layer_1.schema import Logic_OverallResult, Signal_Structure, Logic_Structure
+from engine.Layer_1.Signals.data_integrity_signals import REQUIRED_SIGNALS
 
 # ------------------ ASSUMPTIONS ------------------
 
@@ -26,32 +23,10 @@ logger = logging.getLogger(__name__)
 DIMENSION = "data_integrity"
 
 
-@dataclass(frozen=True)
-class TestResult:
-    dimension: str
-    name: str
-    label: str
-    risk: float
-    metrics: Optional[Dict]
-
-
-@dataclass(frozen=True)
-class OverallResult:
-    dimension: str
-    status: str
-    peak_risk : float | None
-    severity_score : float | None
-    composite : float | None
-    critical: List[str]    # names of CRITICAL signals
-    warnings: List[str]    # names of WARNING signals
-    safe: List[str]        # names of SAFE signals
-    errors: List[str]      # names of ERROR signals
-
-
 # ------------------ ACCESS ------------------
 
 
-def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
+def build_signal_map(signals: List[Signal_Structure]) -> Dict[str, Signal_Structure]:
     return {s.name: s for s in signals}
 
 
@@ -64,7 +39,7 @@ def get_value(signal_map, name):
 # ------------------ CONTRACT VALIDATION ------------------
 
 
-def validate_signals_contract(signal_map: Dict[str, Structure]):
+def validate_signals_contract(signal_map: Dict[str, Signal_Structure]):
     for name, expected_type in REQUIRED_SIGNALS.items():
         s = signal_map.get(name)
 
@@ -90,7 +65,7 @@ def global_missing_risk(sm):
     else:
         label = "CRITICAL"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="global_missing_risk",
         label=label,
@@ -118,7 +93,7 @@ def column_missing_risk(sm):
     flagged = {col: round(r, 4) for col, r in per_column.items() if r > 0.05}
     worst_col = max(per_column, key=per_column.get)
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="column_missing_risk",
         label=label,
@@ -132,7 +107,7 @@ def column_missing_risk(sm):
     )
 
 
-def duplicate_risk(sm: Dict[str, Structure]) -> TestResult:
+def duplicate_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     ratio = get_value(sm, "duplicated_ratio")
 
     if ratio < 0.02:
@@ -142,7 +117,7 @@ def duplicate_risk(sm: Dict[str, Structure]) -> TestResult:
     else:
         label = "CRITICAL"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="duplicate_risk",
         label=label,
@@ -156,7 +131,7 @@ def duplicate_risk(sm: Dict[str, Structure]) -> TestResult:
 
 
 
-def constant_risk(sm: Dict[str, Structure]) -> TestResult:
+def constant_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     data = get_value(sm, "constant_columns_ratio")
     ratio = data["ratio"]
 
@@ -167,7 +142,7 @@ def constant_risk(sm: Dict[str, Structure]) -> TestResult:
     else:
         label = "CRITICAL"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="constant_risk",
         label=label,
@@ -180,10 +155,10 @@ def constant_risk(sm: Dict[str, Structure]) -> TestResult:
     )
 
 
-def hidden_missing_risk(sm: Dict[str, Structure]) -> TestResult:
+def hidden_missing_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = sm["hidden_missing_ratio"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="hidden_missing_risk",
             label="SAFE",
@@ -205,7 +180,7 @@ def hidden_missing_risk(sm: Dict[str, Structure]) -> TestResult:
     flagged = {col: round(r, 4) for col, r in per_column.items() if r > 0.0}
     worst_col = max(per_column, key=per_column.get)
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="hidden_missing_risk",
         label=label,
@@ -217,10 +192,10 @@ def hidden_missing_risk(sm: Dict[str, Structure]) -> TestResult:
     )
 
 
-def mixed_type_risk(sm: Dict[str, Structure]) -> TestResult:
+def mixed_type_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = sm["mixed_type_columns_ratio"]
     if signal.status == "no_value":
-        return TestResult(
+        return Logic_Structure(
             dimension=DIMENSION,
             name="mixed_type_risk",
             label="SAFE",
@@ -238,7 +213,7 @@ def mixed_type_risk(sm: Dict[str, Structure]) -> TestResult:
     else:
         label = "CRITICAL"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="mixed_type_risk",
         label=label,
@@ -263,12 +238,12 @@ LOGIC_REGISTRY = [
 
 LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
 
-def aggregate_risk(results: List[TestResult]) -> OverallResult:
+def aggregate_risk(results: List[Logic_Structure]) -> Logic_OverallResult:
     valid = [r for r in results if r.label in LABEL_SCORE]
     errors = [r.name for r in results if r.label not in LABEL_SCORE]
     
     if not valid:
-        return OverallResult(
+        return Logic_OverallResult(
             dimension=DIMENSION,
             status="REVIEW",
             peak_risk=None,
@@ -304,7 +279,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     composite = round((0.6 * peak_risk + 0.4 * severity_score) , 4)
     
     
-    return OverallResult(
+    return Logic_OverallResult(
         dimension=DIMENSION,
         status=status,
         peak_risk=peak_risk,
@@ -317,13 +292,13 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     )
 
 
-def run_data_integrity_logic(signals: List[Structure]):
+def run_data_integrity_logic(signals: List[Signal_Structure]):
     # 1. build signals map
     sm = build_signal_map(signals)
 
     # 2. verify status of signals 
     if "data_validation" in sm and sm["data_validation"].status == "error":
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="data_validation",
             label="ERROR",
@@ -336,7 +311,7 @@ def run_data_integrity_logic(signals: List[Structure]):
     try:
         validate_signals_contract(sm)
     except (ValueError, TypeError) as e:
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="contract_validation",
             label="ERROR",
@@ -354,7 +329,7 @@ def run_data_integrity_logic(signals: List[Structure]):
             results.append(fn(sm))
         except Exception as e:
             results.append(
-                TestResult(
+                Logic_Structure(
                     dimension=DIMENSION, 
                     name=fn.__name__, 
                     label="ERROR", 
@@ -369,13 +344,13 @@ def run_data_integrity_logic(signals: List[Structure]):
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension='data_integrity', name='dataset_shape', value={'rows': 891, 'cols': 12}, status='ok', meta=None),
-        Structure(dimension='data_integrity', name='global_missing_ratio', value=0.08099513655069211, status='ok', meta={'total_cells': 10692}),
-        Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'PassengerId': 0.0, 'Survived': 0.0, 'Pclass': 0.0, 'Name': 0.0, 'Sex': 0.0, 'Age': 0.19865319865319866, 'SibSp': 0.0, 'Parch': 0.0, 'Ticket': 0.0, 'Fare': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_columns': 12}),
-        Structure(dimension='data_integrity', name='duplicated_ratio', value=0.0, status='ok', meta={'num_rows': 891}),
-        Structure(dimension='data_integrity', name='constant_columns_ratio', value={'columns': [], 'ratio': 0.0}, status='ok', meta={'total_columns': 12}),
-        Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'Name': 0.0, 'Sex': 0.0, 'Ticket': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_object_columns': 5}),
-        Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': ['Ticket'], 'ratio': 0.2}, status='ok', meta={'num_object_columns': 5})
+        Signal_Structure(dimension='data_integrity', name='dataset_shape', value={'rows': 891, 'cols': 12}, status='ok', meta={"total_cells": 10692}),
+        Signal_Structure(dimension='data_integrity', name='global_missing_ratio', value=0.08099513655069211, status='ok', meta={'total_cells': 10692}),
+        Signal_Structure(dimension='data_integrity', name='column_missing_ratio', value={'per_column': {'PassengerId': 0.0, 'Survived': 0.0, 'Pclass': 0.0, 'Name': 0.0, 'Sex': 0.0, 'Age': 0.19865319865319866, 'SibSp': 0.0, 'Parch': 0.0, 'Ticket': 0.0, 'Fare': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_columns': 12}),
+        Signal_Structure(dimension='data_integrity', name='duplicated_ratio', value=0.0, status='ok', meta={'num_rows': 891}),
+        Signal_Structure(dimension='data_integrity', name='constant_columns_ratio', value={'columns': [], 'ratio': 0.0}, status='ok', meta={'total_columns': 12}),
+        Signal_Structure(dimension='data_integrity', name='hidden_missing_ratio', value={'ratios': {'Name': 0.0, 'Sex': 0.0, 'Ticket': 0.0, 'Cabin': 0.7710437710437711, 'Embarked': 0.002244668911335578}, 'worst_ratio': 0.7710437710437711}, status='ok', meta={'num_object_columns': 5}),
+        Signal_Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': ['Ticket'], 'ratio': 0.2}, status='ok', meta={'num_object_columns': 5})
     ]
 
     results, overall = run_data_integrity_logic(mock_signals)

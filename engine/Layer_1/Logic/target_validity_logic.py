@@ -1,9 +1,9 @@
 import numpy as np
 import logging
-from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict
 
-from engine.Layer_1.Signals.target_sanity_signals import Structure, REQUIRED_SIGNALS
+from engine.Layer_1.schema import Signal_Structure, Logic_Structure, Logic_OverallResult
+from engine.Layer_1.Signals.target_validity_signals import REQUIRED_SIGNALS
 
 
 # ------------------ ASSUMPTIONS ------------------
@@ -21,39 +21,15 @@ ASSUMPTIONS = [
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-DIMENSION = "target_viability"
+DIMENSION = "target_validity"
 
-
-# ------------------ RESULT STRUCTURES ------------------
-
-
-@dataclass(frozen=True)
-class TestResult:
-    dimension: str
-    name: str
-    label: str
-    risk: float
-    metrics: Optional[Dict]
-
-
-@dataclass(frozen=True)
-class OverallResult:
-    dimension: str
-    status: str
-    peak_risk : float | None
-    severity_score : float | None
-    composite : float | None
-    critical: List[str]    # names of CRITICAL signals
-    warnings: List[str]    # names of WARNING signals
-    safe: List[str]        # names of SAFE signals
-    errors: List[str]      # names of ERROR signals
 
 
 # ------------------ SIGNAL ACCESS LAYER ------------------
 
 
 # convert the list of signals to dict (easy to access)
-def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
+def build_signal_map(signals: List[Signal_Structure]) -> Dict[str, Signal_Structure]:
     signal_map = {}
 
     for s in signals:
@@ -65,7 +41,7 @@ def build_signal_map(signals: List[Structure]) -> Dict[str, Structure]:
 
 
 # a shortcut helper func to get the value of the signal
-def get_value(signal_map: Dict[str, Structure], name: str):
+def get_value(signal_map: Dict[str, Signal_Structure], name: str):
     s = signal_map[name]
 
     if s.status != "ok":
@@ -77,7 +53,7 @@ def get_value(signal_map: Dict[str, Structure], name: str):
 # ------------------ CONTRACT VALIDATION ------------------
 
 
-def validate_signals_contract(signal_map: Dict[str, Structure]):
+def validate_signals_contract(signal_map: Dict[str, Signal_Structure]):
 
     for name, expected_type in REQUIRED_SIGNALS.items():
         s = signal_map.get(name)
@@ -93,7 +69,7 @@ def validate_signals_contract(signal_map: Dict[str, Structure]):
 # ------------------ LOGIC FUNCTIONS ------------------
 
 
-def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def missing_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["target_missing_ratio"]
     ratio = signal.value
     samples = signal.meta["n_samples"]
@@ -105,7 +81,7 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="missing_risk",
         label=label,
@@ -118,7 +94,7 @@ def missing_risk(signal_map: Dict[str, Structure]) -> TestResult:
     )
 
 
-def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def target_degeneracy_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["target_degeneracy_flag"]
     flag = signal.value
     value_count = signal.meta["unique_values"]
@@ -128,7 +104,7 @@ def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="target_degeneracy_risk",
         label=label,
@@ -140,7 +116,7 @@ def target_degeneracy_risk(signal_map: Dict[str, Structure]) -> TestResult:
     )
 
 
-def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def dominant_class_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["dominant_class_ratio"]
     ratio = signal.value
 
@@ -151,7 +127,7 @@ def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="dominance_class_risk",
         label=label,
@@ -165,7 +141,7 @@ def dominant_class_risk(signal_map: Dict[str, Structure]) -> TestResult:
     )
 
 
-def target_entropy_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def target_entropy_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["target_entropy"]
 
     entropy = signal.value
@@ -184,7 +160,7 @@ def target_entropy_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "CRITICAL"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="target_entropy_risk",
         label=label,
@@ -198,7 +174,7 @@ def target_entropy_risk(signal_map: Dict[str, Structure]) -> TestResult:
     )
 
 
-def type_contamination_risk(signal_map: Dict[str, Structure]) -> TestResult:
+def type_contamination_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["type_contamination_ratio"]
     ratio = signal.value
     
@@ -209,7 +185,7 @@ def type_contamination_risk(signal_map: Dict[str, Structure]) -> TestResult:
     else:
         label = "SAFE"
 
-    return TestResult(
+    return Logic_Structure(
         dimension=DIMENSION,
         name="type_contamination_risk",
         label=label,
@@ -241,13 +217,13 @@ LOGIC_REGISTRY = [
 LABEL_SCORE = {"CRITICAL": 1.0, "WARNING": 0.5, "SAFE": 0.0}
 
 
-def aggregate_risk(results: List[TestResult]) -> OverallResult:
+def aggregate_risk(results: List[Logic_Structure]) -> Logic_OverallResult:
     valid = [r for r in results if r.label in LABEL_SCORE]
     errors = [r.name for r in results if r.label not in LABEL_SCORE]
     
 
     if not valid:
-        return OverallResult(
+        return Logic_OverallResult(
             dimension=DIMENSION,
             status="REVIEW",
             peak_risk=None,
@@ -280,7 +256,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     # severity tells you how widespread it is
     composite = round((0.6 * peak_risk + 0.4 * severity_score) , 4)
     
-    return OverallResult(
+    return Logic_OverallResult(
         dimension=DIMENSION,
         status=status,
         peak_risk=peak_risk,
@@ -296,34 +272,34 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
 # ------------------ ORCHESTRATOR ------------------
 
 
-def run_target_sanity_logic(signals: List[Structure]):
+def run_target_validity_logic(signals: List[Signal_Structure]):
 
     # 1. build signals map
     signal_map = build_signal_map(signals)
 
     # 2. verify status of signals 
     if "target_validation" in signal_map and signal_map["target_validation"].status == "error":
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="target_validation",
             label="ERROR",
             risk=1.0,
             metrics=signal_map["target_validation"].meta
         )
-        return [err_res], aggregate_risk([err_res]), signal_map
+        return [err_res], aggregate_risk([err_res])
 
     # 3. validate signal contract 
     try:
         validate_signals_contract(signal_map)
     except (ValueError, TypeError) as e:
-        err_res = TestResult(
+        err_res = Logic_Structure(
             dimension=DIMENSION,
             name="contract_validation",
             label="ERROR",
             risk=1.0,
             metrics={"error": str(e)}
         )
-        return [err_res], aggregate_risk([err_res]), signal_map
+        return [err_res], aggregate_risk([err_res])
 
     # 4. run a loop on registry, for each func pass the signal_map,
     # if the signal don't have required valid data (like value), just store this in exception and the error
@@ -334,7 +310,7 @@ def run_target_sanity_logic(signals: List[Structure]):
             results.append(fn(signal_map))
         except Exception as e:
             results.append(
-                TestResult(
+                Logic_Structure(
                     dimension=DIMENSION,
                     name=fn.__name__,
                     label="ERROR",
@@ -346,21 +322,20 @@ def run_target_sanity_logic(signals: List[Structure]):
     # 5. pass the results list to aggregator 
     overall = aggregate_risk(results)
 
-    return results, overall, signal_map  # ^ the formatter will extract the target name 
-
+    return results, overall
 
 if __name__ == "__main__":
     mock_signals = [
-        Structure(dimension='target_viability', name='target_column_name', value='Ticket', status='ok', meta={'dtype': 'object'}),
-        Structure(dimension='target_viability', name='target_shape', value={'rows': 891, 'cols': 1}, status='ok', meta={'n_samples': 891}),
-        Structure(dimension='target_viability', name='target_missing_ratio', value=0.0, status='ok', meta={'n_samples': 891, 'missing_count': 0}),
-        Structure(dimension='target_viability', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 681}),
-        Structure(dimension='target_viability', name='dominant_class_ratio', value=0.007856341189674524, status='ok', meta={'n_samples': 891, 'dominant_class': '347082', 'dominant_count': 7, 'total_unique': 681, 'class_distribution': {'347082': 0.0079, '1601': 0.0079, 'ca. 2343': 0.0079, '3101295': 0.0067, 'ca 2144': 0.0067, '347088': 0.0067, '382652': 0.0056, 's.o.c. 14879': 0.0056, '113760': 0.0045, '19950': 0.0045, '_other': 0.936}}),
-        Structure(dimension='target_viability', name='target_entropy', value=9.23300039564576, status='ok', meta={'num_classes': 681, 'max_entropy': 9.4115}),
-        Structure(dimension='target_viability', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'str', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'str': 891}})
+        Signal_Structure(dimension='target_validity', name='target_column_name', value='Ticket', status='ok', meta={'dtype': 'object'}),
+        Signal_Structure(dimension='target_validity', name='target_shape', value={'rows': 891, 'cols': 1}, status='ok', meta={'n_samples': 891}),
+        Signal_Structure(dimension='target_validity', name='target_missing_ratio', value=0.0, status='ok', meta={'n_samples': 891, 'missing_count': 0}),
+        Signal_Structure(dimension='target_validity', name='target_degeneracy_flag', value=False, status='ok', meta={'unique_values': 681}),
+        Signal_Structure(dimension='target_validity', name='dominant_class_ratio', value=0.007856341189674524, status='ok', meta={'n_samples': 891, 'dominant_class': '347082', 'dominant_count': 7, 'total_unique': 681, 'class_distribution': {'347082': 0.0079, '1601': 0.0079, 'ca. 2343': 0.0079, '3101295': 0.0067, 'ca 2144': 0.0067, '347088': 0.0067, '382652': 0.0056, 's.o.c. 14879': 0.0056, '113760': 0.0045, '19950': 0.0045, '_other': 0.936}}),
+        Signal_Structure(dimension='target_validity', name='target_entropy', value=9.23300039564576, status='ok', meta={'num_classes': 681, 'max_entropy': 9.4115}),
+        Signal_Structure(dimension='target_validity', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'str', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'str': 891}})
     ]
 
-    results, overall, mock_signals = run_target_sanity_logic(mock_signals)
+    results, overall = run_target_validity_logic(mock_signals)
 
     for r in results:
         print(r)

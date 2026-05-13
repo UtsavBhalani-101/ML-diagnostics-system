@@ -41,7 +41,7 @@ const STATUS_STYLES: Record<ValidationStatus, {
 
 const SECTION_ICONS = {
     data_integrity: Shield,
-    target_viability: Target,
+    target_validity: Target,
     sample_adequacy: Database,
 };
 

@@ -102,7 +102,7 @@ export interface Layer1FinalOutput {
     };
     dimensions: {
         data_integrity: DimensionResult;
-        target_viability: DimensionResult;
+        target_validity: DimensionResult;
         sample_adequacy: DimensionResult;
     };
 }
@@ -145,7 +145,7 @@ export interface DocsResponse {
             purpose: string;
             dimensions: {
                 data_integrity: string;
-                target_viability: string;
+                target_validity: string;
                 sample_adequacy: string;
             };
             outputs: {

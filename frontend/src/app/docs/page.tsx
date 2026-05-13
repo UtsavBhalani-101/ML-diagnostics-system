@@ -88,8 +88,8 @@ export default function DocsPage() {
                                     body={docs.layers.layer_1.dimensions.data_integrity}
                                 />
                                 <DocCard
-                                    title="Target Viability"
-                                    body={docs.layers.layer_1.dimensions.target_viability}
+                                    title="Target Validity"
+                                    body={docs.layers.layer_1.dimensions.target_validity}
                                 />
                                 <DocCard
                                     title="Sample Adequacy"

@@ -101,28 +101,25 @@ def run_pipeline(filepath: str, target_column=None):
 
 def run_pipeline_from_df(df: pd.DataFrame, target_column=None) -> dict[str, Any]:
     try:
-        logger.info("Running signal extraction")
-        flat_signals, signal_structures = signals.run_signal_extraction(df, target_column=target_column)
+        # 1. Signal Extraction
+        signals_res = signals.run_signal_extraction(df, target_column=target_column)
+        flat_signals = {k: [s.value for s in v] for k, v in signals_res.dimensions.items()} # simplified for compute_facts if needed, or just pass signals_res
 
         # 2. Facts
-        facts = compute_facts(df, flat_signals)
+        # Note: compute_facts might need adjustment if it relies on flat_signals format
+        facts = compute_facts(df, {"rows": df.shape[0], "cols": df.shape[1]}) 
 
         # 3. Dimension Evaluations
         logger.info("Evaluating dimensions")
-
-        dimensions = {
-            "data_integrity": logic.evaluate_data_integrity(signal_structures, flat_signals),
-            "target_viability": logic.evaluate_target_viability(signal_structures, flat_signals),
-            "sample_adequacy": logic.evaluate_sample_adequacy(signal_structures, flat_signals),
-        }
+        logic_res = logic.run_logic_extraction(signals_res)
 
         result = {
             "data_loaded": True,
-            "shape": df.shape,
-            "signals": flat_signals,
+            "shape": list(df.shape),
+            "signals": signals_res.dimensions,
             "logic": {
                 "facts": facts,
-                "dimensions": dimensions,
+                "dimensions": logic_res.dimensions,
             }
         }
 

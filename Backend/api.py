@@ -50,7 +50,7 @@ DOCS_PAYLOAD = {
                     "This includes missingness ratios, duplicate density, constant columns, "
                     "hidden missing values, and mixed-type fields."
                 ),
-                "target_viability": (
+                "target_validity": (
                     "Checks whether the selected target can support supervised learning. "
                     "This includes missing labels, target variability, class imbalance, "
                     "and uncertainty about the task implied by the target."

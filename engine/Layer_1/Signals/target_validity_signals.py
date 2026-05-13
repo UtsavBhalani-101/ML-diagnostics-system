@@ -329,7 +329,7 @@ if __name__ == "__main__":
     target_col = df['Ticket']
 
     print("--- Running Target Signals ---")
-    results = run_target_sanity_signals(target_col, 'Ticket')
+    results = run_target_validity_signals(target_col, 'Ticket')
     
     for res in results:
         # print(f"{res.name}:")
