@@ -1,3 +1,5 @@
+import pandas as pd
+
 def apply_dtype_normalization(
     df: pd.DataFrame,
     plan: dict,

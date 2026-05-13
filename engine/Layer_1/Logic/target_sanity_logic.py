@@ -296,7 +296,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
 # ------------------ ORCHESTRATOR ------------------
 
 
-def run_target_viability(signals: List[Structure]):
+def run_target_sanity_logic(signals: List[Structure]):
 
     # 1. build signals map
     signal_map = build_signal_map(signals)
@@ -360,7 +360,7 @@ if __name__ == "__main__":
         Structure(dimension='target_viability', name='type_contamination_ratio', value=0.0, status='ok', meta={'major_type': 'str', 'contaminated_count': 0, 'total_non_null': 891, 'type_breakdown': {'str': 891}})
     ]
 
-    results, overall, mock_signals = run_target_viability(mock_signals)
+    results, overall, mock_signals = run_target_sanity_logic(mock_signals)
 
     for r in results:
         print(r)

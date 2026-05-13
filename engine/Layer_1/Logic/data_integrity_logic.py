@@ -317,7 +317,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
     )
 
 
-def run_data_integrity(signals: List[Structure]):
+def run_data_integrity_logic(signals: List[Structure]):
     # 1. build signals map
     sm = build_signal_map(signals)
 
@@ -378,7 +378,7 @@ if __name__ == "__main__":
         Structure(dimension='data_integrity', name='mixed_type_columns_ratio', value={'columns': ['Ticket'], 'ratio': 0.2}, status='ok', meta={'num_object_columns': 5})
     ]
 
-    results, overall = run_data_integrity(mock_signals)
+    results, overall = run_data_integrity_logic(mock_signals)
 
     for r in results:
         print(r)

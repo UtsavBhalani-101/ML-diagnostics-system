@@ -10,6 +10,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+from starlette.formparsers import MultiPartParser
 
 from Backend.file_support_check import (
     get_supported_extensions,
@@ -22,7 +23,8 @@ from engine.Layer_1.pipeline import run_pipeline_from_df
 RESULTS_DIR = "results"
 os.makedirs(os.path.join(RESULTS_DIR, "layer_1"), exist_ok=True)
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+MultiPartParser.max_part_size = MAX_FILE_SIZE
 
 
 DOCS_PAYLOAD = {
@@ -84,7 +86,7 @@ DOCS_PAYLOAD = {
     "limitations": (
         "This system is heuristic-based. It is not ground truth, it does not replace domain expertise, "
         "and it still requires human judgment when deciding whether a dataset is acceptable for a specific use case. "
-        "Maximum upload size is 10 MB."
+        "Maximum upload size is 50 MB."
     ),
 }
 
@@ -352,7 +354,7 @@ async def home() -> dict[str, Any]:
             "GET /health": "Health check endpoint",
             "GET /docs": "Interactive API documentation (Swagger UI)",
             "GET /redoc": "Alternative API documentation (ReDoc)",
-            "POST /validate-file": "Upload and validate a data file (max 10 MB)",
+            "POST /validate-file": "Upload and validate a data file (max 50 MB)",
             "GET /supported-extensions": "List supported file formats",
             "POST /dataset-columns": "Upload file and get column names",
             "POST /set-target-column": "Upload file and validate a target column",
@@ -467,8 +469,11 @@ async def get_dataset_columns(file: UploadFile = File(...)) -> DatasetColumnsRes
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {exc}"
+        ) from exc
 
 @app.post(
     "/set-target-column",

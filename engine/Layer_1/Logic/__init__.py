@@ -16,9 +16,9 @@ matching the formatter's expected structure:
 """
 import logging
 
-from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity
-from engine.Layer_1.Logic.target_sanity_logic import run_target_viability
-from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy
+from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity_logic
+from engine.Layer_1.Logic.target_sanity_logic import run_target_sanity_logic
+from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy_logic
 from engine.Layer_1.primary_issues import generate_primary_issues
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ def evaluate_data_integrity(structures: list, flat_signals: dict) -> dict:
     }
 
     dim_structs = [s for s in structures if s.dimension == "data_integrity"]
-    results, overall = run_data_integrity(dim_structs)
+    results, overall = run_data_integrity_logic(dim_structs)
     dominant_risks, additive_risks = _build_breakdown(results)
 
     return _build_dimension_dict(
@@ -151,7 +151,7 @@ def evaluate_target_viability(structures: list, flat_signals: dict) -> dict:
         )
 
     try:
-        results, overall, _signal_map = run_target_viability(dim_structs)
+        results, overall, _signal_map = run_target_sanity_logic(dim_structs)
         dominant_risks, additive_risks = _build_breakdown(results)
 
         return _build_dimension_dict(
@@ -187,7 +187,7 @@ def evaluate_sample_adequacy(structures: list, flat_signals: dict) -> dict:
     }
 
     dim_structs = [s for s in structures if s.dimension == "sample_adequacy"]
-    results, overall = run_sample_adequacy(dim_structs)
+    results, overall = run_sample_adequacy_logic(dim_structs)
     dominant_risks, additive_risks = _build_breakdown(results)
 
     return _build_dimension_dict(

@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import sys
 import logging
+from typing import Any, TypeVar
+
+T = TypeVar("T")
 
 from engine.Layer_1 import Signals as signals
 from engine.Layer_1 import Logic as logic
@@ -13,7 +16,7 @@ logger = logging.getLogger(__name__)
 # -------------------------
 # UTILS
 # -------------------------
-def convert_numpy_types(obj):
+def convert_numpy_types(obj: T) -> T:
     if isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
@@ -96,7 +99,7 @@ def run_pipeline(filepath: str, target_column=None):
     return run_pipeline_from_df(df, target_column=target_column)
 
 
-def run_pipeline_from_df(df: pd.DataFrame, target_column=None):
+def run_pipeline_from_df(df: pd.DataFrame, target_column=None) -> dict[str, Any]:
     try:
         logger.info("Running signal extraction")
         flat_signals, signal_structures = signals.run_signal_extraction(df, target_column=target_column)

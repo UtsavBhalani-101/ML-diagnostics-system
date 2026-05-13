@@ -350,7 +350,7 @@ def aggregate_risk(results: List[TestResult]) -> OverallResult:
 
 # ------------------ ORCHESTRATOR ------------------
 
-def run_sample_adequacy(signals: List[Structure]):
+def run_sample_adequacy_logic(signals: List[Structure]):
     
     
     # 1. build signals map
@@ -414,7 +414,7 @@ if __name__ == "__main__":
         Structure(dimension='sample_adequacy', name='joint_coverage', value=1.0, status='ok', meta={'grid_fill': 1.0})
     ]
 
-    results, overall = run_sample_adequacy(mock_signals)
+    results, overall = run_sample_adequacy_logic(mock_signals)
 
     for r in results:
         print(r)
