@@ -1,10 +1,13 @@
 def print_layer1_report(result: dict) -> None:
     logic = result.get("logic", {})
     facts = logic.get("facts", {})
-    dimensions = logic.get("dimensions", {})
+    
+    # Use the formatted dimensions from final_output
+    final_output = result.get("final_output", {})
+    dimensions = final_output.get("dimensions", {})
 
     print("\n" + "=" * 60)
-    print("        DATASET TRIAGE (LAYER 1 - RISK BASED)")
+    print("        DATASET TRIAGE (LAYER 1 - EXPERT MODE)")
     print("=" * 60)
 
     # -------------------------
@@ -33,22 +36,23 @@ def print_layer1_report(result: dict) -> None:
         print(f"\n[{name.upper()}]")
         print("-" * 40)
 
-        print(f"Status: {dim['status']}")
-        print(f"Risk:   {dim['total_risk']:.3f}")
+        print(f"Status:         {dim.get('status')}")
+        print(f"Composite Risk: {dim.get('composite_risk', 0.0):.3f}")
+        print(f"Peak Risk:      {dim.get('peak_risk', 0.0):.3f}")
 
-        print("\n  Dominant Risks:")
-        if dim["dominant_risks"]:
-            for k, v in dim["dominant_risks"].items():
-                print(f"    - {k}: {v:.3f}")
+        checks = dim.get("checks", [])
+        if checks:
+            print("\n  Checks:")
+            for check in checks:
+                label = check.get('label', 'UNKNOWN')
+                # Add color/indicator based on label
+                indicator = "!" if label in ["CRITICAL", "STOP"] else "-"
+                print(f"    {indicator} [{label}] {check.get('name')}: {check.get('risk', 0.0):.3f}")
         else:
-            print("    None")
+            print("\n  No checks performed.")
 
-        print("\n  Additive Risks:")
-        if dim["additive_risks"]:
-            for k, v in dim["additive_risks"].items():
-                print(f"    - {k}: {v:.3f}")
-        else:
-            print("    None")
+        if dim.get("interpretation"):
+            print(f"\n  Note: {dim.get('interpretation')}")
 
     # -------------------------
     # OVERALL
@@ -57,8 +61,9 @@ def print_layer1_report(result: dict) -> None:
     print("        OVERALL ASSESSMENT")
     print("=" * 60)
 
-    overall = result.get("final_output", {}).get("overall", {})
+    overall = final_output.get("overall", {})
 
     print(f"\nStatus: {overall.get('status')}")
-    print(f"Risk:   {overall.get('risk'):.3f}")
+    print(f"Risk:   {overall.get('risk', 0.0):.3f}")
+    print(f"Source: {overall.get('primary_failure_source', 'N/A')}")
     print("\n" + "=" * 60 + "\n")

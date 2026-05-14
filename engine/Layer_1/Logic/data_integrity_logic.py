@@ -293,11 +293,13 @@ def aggregate_risk(results: List[Logic_Structure]) -> Logic_OverallResult:
 
 
 def run_data_integrity_logic(signals: List[Signal_Structure]):
+    logger.info(f"Executing {DIMENSION} logic suite")
     # 1. build signals map
     sm = build_signal_map(signals)
 
     # 2. verify status of signals 
     if "data_validation" in sm and sm["data_validation"].status == "error":
+        logger.warning(f"{DIMENSION} logic halted: data_validation error")
         err_res = Logic_Structure(
             dimension=DIMENSION,
             name="data_validation",
@@ -311,6 +313,7 @@ def run_data_integrity_logic(signals: List[Signal_Structure]):
     try:
         validate_signals_contract(sm)
     except (ValueError, TypeError) as e:
+        logger.error(f"{DIMENSION} contract validation failed: {str(e)}")
         err_res = Logic_Structure(
             dimension=DIMENSION,
             name="contract_validation",
@@ -326,8 +329,10 @@ def run_data_integrity_logic(signals: List[Signal_Structure]):
 
     for fn in LOGIC_REGISTRY:
         try:
+            logger.debug(f"Evaluating logic: {fn.__name__}")
             results.append(fn(sm))
         except Exception as e:
+            logger.error(f"Logic function {fn.__name__} failed: {str(e)}")
             results.append(
                 Logic_Structure(
                     dimension=DIMENSION, 

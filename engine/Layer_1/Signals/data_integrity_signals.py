@@ -246,10 +246,11 @@ REQUIRED_SIGNALS = {
 
 
 def run_data_integrity_signals(df: pd.DataFrame) -> List[Signal_Structure]:
-
+    logger.info(f"Executing {DIMENSION} signal suite")
     validation = validate_data(df)
 
     if validation["status"] == "fail":
+        logger.warning(f"{DIMENSION} validation failed: {validation['reason']}")
         return [
             Signal_Structure(
                 dimension=DIMENSION,
@@ -264,8 +265,10 @@ def run_data_integrity_signals(df: pd.DataFrame) -> List[Signal_Structure]:
 
     for fn in SIGNALS_REGISTRY:
         try:
+            logger.debug(f"Running signal: {fn.__name__}")
             results.append(fn(df))
         except Exception as e:
+            logger.error(f"Signal {fn.__name__} failed: {str(e)}")
             results.append(
                 Signal_Structure(
                     dimension=DIMENSION,

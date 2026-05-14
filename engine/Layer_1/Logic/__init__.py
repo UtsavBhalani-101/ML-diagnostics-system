@@ -6,6 +6,7 @@ containing risks and overall status for each dimension.
 """
 import logging
 
+from dataclasses import asdict
 from engine.Layer_1.Logic.data_integrity_logic import run_data_integrity_logic
 from engine.Layer_1.Logic.target_validity_logic import run_target_validity_logic
 from engine.Layer_1.Logic.sample_adequacy_logic import run_sample_adequacy_logic
@@ -16,29 +17,20 @@ logger = logging.getLogger(__name__)
 def _build_dimension_dict(
     *,
     dimension_signals: list,
-    dominant_risks: dict,
-    additive_risks: dict,
-    total_risk: float,
-    status: str,
+    results: list,
+    overall,
     interpretation: str,
 ) -> dict:
     return {
         "signals": {s.name: s.value for s in dimension_signals},
-        "dominant_risks": dominant_risks,
-        "additive_risks": additive_risks,
-        "total_risk": round(float(total_risk), 4),
-        "status": status,
-        "primary_issues": [
-            {"name": k, "risk": v, "action": "Investigate"} for k, v in dominant_risks.items()
-        ],
+        "raw_results": [asdict(r) for r in results],
+        "total_risk": round(float(getattr(overall, "composite", 0.0)), 4),
+        "peak_risk": round(float(getattr(overall, "peak_risk", 0.0)), 4),
+        "status": overall.status,
+        "critical": getattr(overall, "critical", []),
+        "warnings": getattr(overall, "warnings", []),
         "interpretation": interpretation,
     }
-
-def _overall_risk(overall) -> float:
-    risk = getattr(overall, "composite", None)
-    if risk is None:
-        risk = getattr(overall, "peak_risk", None)
-    return round(float(risk or 0.0), 4)
 
 def _interpretation(dimension_name: str, overall) -> str:
     status = getattr(overall, "status", "REVIEW")
@@ -56,15 +48,8 @@ def _interpretation(dimension_name: str, overall) -> str:
         return f"{dimension_name} checks did not raise material structural risk."
     return f"{dimension_name} completed with status {status}."
 
-def _build_breakdown(results: list) -> tuple:
-    dominant = {r.name: r.risk for r in results if r.risk >= 0.5 and r.label != "ERROR"}
-    additive = {r.name: r.risk for r in results if 0.0 < r.risk < 0.5 and r.label != "ERROR"}
-    errors = {r.name: 1.0 for r in results if r.label == "ERROR"}
-    if errors:
-        dominant.update(errors)
-    return dominant, additive
-
 def run_logic_extraction(signals: SignalExtractionResult) -> LogicExtractionResult:
+    logger.info("Starting Layer 1 logic interpretation")
     dimensions = {}
     
     mapping = {
@@ -75,17 +60,17 @@ def run_logic_extraction(signals: SignalExtractionResult) -> LogicExtractionResu
 
     for key, (label, run_func) in mapping.items():
         if key in signals.dimensions:
+            logger.info(f"Evaluating logic for dimension: {label}")
             results, overall = run_func(signals.dimensions[key])
-            dom, add = _build_breakdown(results)
+            
             dimensions[key] = _build_dimension_dict(
                 dimension_signals=signals.dimensions[key],
-                dominant_risks=dom,
-                additive_risks=add,
-                total_risk=_overall_risk(overall),
-                status=overall.status,
+                results=results,
+                overall=overall,
                 interpretation=_interpretation(label, overall),
             )
 
+    logger.info("Logic interpretation complete")
     return LogicExtractionResult(dimensions=dimensions)
 
 

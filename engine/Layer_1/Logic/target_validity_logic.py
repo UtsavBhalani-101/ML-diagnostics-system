@@ -273,12 +273,13 @@ def aggregate_risk(results: List[Logic_Structure]) -> Logic_OverallResult:
 
 
 def run_target_validity_logic(signals: List[Signal_Structure]):
-
+    logger.info(f"Executing {DIMENSION} logic suite")
     # 1. build signals map
     signal_map = build_signal_map(signals)
 
     # 2. verify status of signals 
     if "target_validation" in signal_map and signal_map["target_validation"].status == "error":
+        logger.warning(f"{DIMENSION} logic halted: target_validation error")
         err_res = Logic_Structure(
             dimension=DIMENSION,
             name="target_validation",
@@ -292,6 +293,7 @@ def run_target_validity_logic(signals: List[Signal_Structure]):
     try:
         validate_signals_contract(signal_map)
     except (ValueError, TypeError) as e:
+        logger.error(f"{DIMENSION} contract validation failed: {str(e)}")
         err_res = Logic_Structure(
             dimension=DIMENSION,
             name="contract_validation",
@@ -307,8 +309,10 @@ def run_target_validity_logic(signals: List[Signal_Structure]):
 
     for fn in LOGIC_REGISTRY:
         try:
+            logger.debug(f"Evaluating logic: {fn.__name__}")
             results.append(fn(signal_map))
         except Exception as e:
+            logger.error(f"Logic function {fn.__name__} failed: {str(e)}")
             results.append(
                 Logic_Structure(
                     dimension=DIMENSION,

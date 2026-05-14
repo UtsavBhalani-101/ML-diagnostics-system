@@ -16,17 +16,22 @@ logger = logging.getLogger(__name__)
 
 
 def run_signal_extraction(df: pd.DataFrame, target_column: str | None = None) -> SignalExtractionResult:
-    
+    logger.info("Starting Layer 1 signal extraction")
     dimensions = {}
     
+    logger.info("Extracting Data Integrity signals")
     dimensions["data_integrity"] = run_data_integrity_signals(df)
+    
+    logger.info("Extracting Sample Adequacy signals")
     dimensions["sample_adequacy"] = run_sample_adequacy_signals(df)
     
     if target_column and target_column in df.columns:
+        logger.info(f"Extracting Target Validity signals for: {target_column}")
         y = df[target_column]
         if isinstance(y, pd.Series):
             dimensions["target_validity"] = run_target_validity_signals(y, target_column)
     
+    logger.info("Signal extraction complete")
     return SignalExtractionResult(dimensions=dimensions)
     
     

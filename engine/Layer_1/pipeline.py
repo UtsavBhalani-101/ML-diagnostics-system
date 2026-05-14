@@ -4,11 +4,14 @@ import sys
 import logging
 from typing import Any, TypeVar
 
+from engine.Layer_1.Signals.target_validity_signals import target_degeneracy_flag
+
 T = TypeVar("T")
 
 from engine.Layer_1 import Signals as signals
 from engine.Layer_1 import Logic as logic
 from engine.Layer_1.formatter import format_final_output
+import engine.Layer_1.schema
 
 logger = logging.getLogger(__name__)
 
@@ -90,75 +93,58 @@ def compute_facts(df: pd.DataFrame, signal_output: dict) -> dict:
 # MAIN PIPELINE (WITHOUT FILEPATH)
 # -------------------------
 
-def run_pipeline(filepath: str, target_column=None):
-    if filepath.endswith(".parquet"):
-        df = pd.read_parquet(filepath)
-    else:
-        df = pd.read_csv(filepath)
-
-    return run_pipeline_from_df(df, target_column=target_column)
-
-
 def run_pipeline_from_df(df: pd.DataFrame, target_column=None) -> dict[str, Any]:
     try:
         # 1. Signal Extraction
-        signals_res = signals.run_signal_extraction(df, target_column=target_column)
-        flat_signals = {k: [s.value for s in v] for k, v in signals_res.dimensions.items()} # simplified for compute_facts if needed, or just pass signals_res
+        extracted_signals = signals.run_signal_extraction(df, target_column=target_column)
 
-        # 2. Facts
-        # Note: compute_facts might need adjustment if it relies on flat_signals format
+        # 2. Compute Facts
         facts = compute_facts(df, {"rows": df.shape[0], "cols": df.shape[1]}) 
 
         # 3. Dimension Evaluations
         logger.info("Evaluating dimensions")
-        logic_res = logic.run_logic_extraction(signals_res)
+        extracted_logic = logic.run_logic_extraction(extracted_signals)
 
         result = {
             "data_loaded": True,
             "shape": list(df.shape),
-            "signals": signals_res.dimensions,
+            "signals": extracted_signals.dimensions,
             "logic": {
                 "facts": facts,
-                "dimensions": logic_res.dimensions,
+                "dimensions": extracted_logic.dimensions,
             }
         }
 
+        # Convert NumPy types for JSON serializability
         result = convert_numpy_types(result)
 
+        # 4. Final Formatting
         final_output = format_final_output(result)
         result["final_output"] = final_output
         result["status"] = "success"
 
         logger.info("Pipeline complete")
-
         return result
 
     except Exception as e:
         logger.exception("Pipeline failed")
         return {"status": "error", "message": str(e)}
     
+    
+def test_run(df: pd.DataFrame, target_column: str | None = None):
+    # This is a convenience wrapper for manual testing that mimics run_pipeline_from_df
+    return run_pipeline_from_df(df, target_column=target_column)
 
-
-
+    
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        filepath = sys.argv[1]
-        target_column = sys.argv[2] if len(sys.argv) > 2 else None
-        
-        try:
-            if filepath.endswith('.parquet'):
-                df = pd.read_parquet(filepath)
-            else:
-                df = pd.read_csv(filepath)
-        except Exception as e:
-            print(f"Failed to load data from {filepath}: {e}")
-            sys.exit(1)
-            
-        res = run_pipeline_from_df(df, target_column=target_column)
-        from engine.Layer_1.report import print_layer1_report
-        print_layer1_report(res)
-    else:
-        print("Usage: python pipeline.py <path_to_dataset> [target_column]")
-        sys.exit(1)
+    df = pd.read_csv(r"D:\ML diagnose v1\test_files\train.csv")
+    target = "Survived"
+    
+    # 2. Get the result
+    result = test_run(df, target)
+    
+    # 3. Print the polished report instead of the raw dict
+    from engine.Layer_1.report import print_layer1_report
+    print_layer1_report(result)
