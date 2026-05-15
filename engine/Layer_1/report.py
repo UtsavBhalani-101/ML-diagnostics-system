@@ -67,3 +67,7 @@ def print_layer1_report(result: dict) -> None:
     print(f"Risk:   {overall.get('risk', 0.0):.3f}")
     print(f"Source: {overall.get('primary_failure_source', 'N/A')}")
     print("\n" + "=" * 60 + "\n")
+    
+    
+if __name__ == "__main__":
+    print_layer1_report()

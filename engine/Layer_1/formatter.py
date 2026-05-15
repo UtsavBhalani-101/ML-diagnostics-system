@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
 
-from engine.Layer_1.risk_template import STATUS_RANK, worst_status
+from engine.Layer_1.risk_template import worst_status
 
 logger = logging.getLogger(__name__)
 

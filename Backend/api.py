@@ -116,31 +116,32 @@ class ErrorResponse(BaseModel):
     detail: str = Field(..., description="Error message")
 
 
-class PrimaryIssueResponse(BaseModel):
-    name: str = Field(..., description="Risk name")
-    risk: float = Field(..., description="Risk contribution for this issue")
-    action: str = Field(..., description="Mapped next action for investigation")
-
-
-class DimensionBreakdownResponse(BaseModel):
-    dominant: dict[str, float] = Field(..., description="Primary causes that should not be diluted")
-    additive: dict[str, float] = Field(..., description="Contributing factors that combine into risk")
+class CheckResponse(BaseModel):
+    """One logic check from the engine's formatter output."""
+    name: Optional[str] = Field(None, description="Check identifier (e.g. 'missing_values')")
+    label: Optional[str] = Field(None, description="Severity label (CRITICAL / WARNING / SAFE / ERROR)")
+    risk: Optional[float] = Field(None, description="Risk score for this check (0.0–1.0)")
+    threshold: Optional[Any] = Field(None, description="Threshold value the check was evaluated against")
+    observed: Optional[Any] = Field(None, description="Observed value from the data")
+    impact: Optional[str] = Field(None, description="Impact classification (blocker / degrading / none)")
+    detail: Optional[dict[str, Any]] = Field(None, description="Full metrics dict for this check")
 
 
 class DimensionResultResponse(BaseModel):
-    status: str = Field(..., description="Dimension status label")
-    risk: float = Field(..., description="Dimension total risk score")
-    breakdown: DimensionBreakdownResponse = Field(..., description="Risk contribution breakdown")
-    signals: dict[str, Any] = Field(..., description="Signals for this dimension")
-    primary_issues: list[PrimaryIssueResponse] = Field(..., description="Top dominant issues with mapped actions")
-    interpretation: str = Field(..., description="Short explanation of the dimension state")
+    """Per-dimension result exactly as emitted by the formatter."""
+    status: str = Field(..., description="Dimension status (PROCEED / REVIEW / STOP)")
+    composite_risk: Optional[float] = Field(None, description="Weighted composite risk score")
+    peak_risk: Optional[float] = Field(None, description="Highest individual risk score in this dimension")
+    critical: list[str] = Field(default_factory=list, description="Names of CRITICAL-level signals")
+    warnings: list[str] = Field(default_factory=list, description="Names of WARNING-level signals")
+    checks: list[CheckResponse] = Field(default_factory=list, description="Individual logic check results")
+    interpretation: Optional[str] = Field(None, description="Short explanation of the dimension state")
 
 
 class OverallRiskResponse(BaseModel):
     status: str = Field(..., description="Worst status across all dimensions")
     risk: float = Field(..., description="Overall risk score")
     primary_failure_source: Optional[str] = Field(None, description="Highest-risk dimension key")
-    failing_dimensions: int = Field(..., description="Number of dimensions currently not SAFE")
     total_dimensions: int = Field(..., description="Total number of evaluated dimensions")
 
 
@@ -416,29 +417,6 @@ async def run_diagnostics(
     # Convert shape tuple to list for strict Pydantic validation
     if "shape" in result and isinstance(result["shape"], tuple):
         result["shape"] = list(result["shape"])
-
-    # Map the new Layer 1 status outputs back to SAFE/WARNING/CRITICAL
-    if "final_output" in result and result.get("status") == "success":
-        status_map = {
-            "PROCEED": "SAFE",
-            "REVIEW": "WARNING",
-            "STOP": "CRITICAL"
-        }
-        
-        failing_count = 0
-        dimensions = result["final_output"].get("dimensions", {})
-        
-        for dim_name, dim_data in dimensions.items():
-            if dim_data.get("status") in status_map:
-                dim_data["status"] = status_map[dim_data["status"]]
-            if dim_data.get("status") != "SAFE":
-                failing_count += 1
-                
-        overall = result["final_output"].get("overall", {})
-        if overall.get("status") in status_map:
-            overall["status"] = status_map[overall["status"]]
-            
-        overall["failing_dimensions"] = failing_count
 
     return Layer1OutputResponse(**result)
 

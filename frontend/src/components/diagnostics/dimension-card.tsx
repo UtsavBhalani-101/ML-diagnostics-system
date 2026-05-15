@@ -39,7 +39,7 @@ const STATUS_STYLES: Record<ValidationStatus, {
     },
 };
 
-const SECTION_ICONS = {
+const SECTION_ICONS: Record<string, typeof Shield> = {
     data_integrity: Shield,
     target_validity: Target,
     sample_adequacy: Database,
@@ -142,7 +142,7 @@ function CheckRow({ check }: { check: ValidationCheck }) {
 }
 
 export function DimensionCard({ section, className }: DimensionCardProps) {
-    const SectionIcon = SECTION_ICONS[section.key] ?? Database;
+    const SectionIcon = SECTION_ICONS[section.key as string] ?? Database;
     const failCount = countByStatus(section.checks, "FAIL");
     const warningCount = countByStatus(section.checks, "WARNING");
     const passCount = countByStatus(section.checks, "PASS");

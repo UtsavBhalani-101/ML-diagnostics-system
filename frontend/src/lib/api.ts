@@ -72,24 +72,24 @@ export interface TargetColumnResponse {
     available_columns: string[] | null;
 }
 
-export interface PrimaryIssue {
-    name: string;
-    risk: number;
-    action: string;
-}
-
-export interface DimensionBreakdown {
-    dominant: Record<string, number>;
-    additive: Record<string, number>;
+export interface CheckResult {
+    name: string | null;
+    label: string | null;
+    risk: number | null;
+    threshold: unknown;
+    observed: unknown;
+    impact: string | null;
+    detail: Record<string, unknown> | null;
 }
 
 export interface DimensionResult {
     status: string;
-    risk: number;
-    breakdown: DimensionBreakdown;
-    signals: Record<string, unknown>;
-    primary_issues: PrimaryIssue[];
-    interpretation: string;
+    composite_risk: number | null;
+    peak_risk: number | null;
+    critical: string[];
+    warnings: string[];
+    checks: CheckResult[];
+    interpretation: string | null;
 }
 
 export interface Layer1FinalOutput {
@@ -97,14 +97,9 @@ export interface Layer1FinalOutput {
         status: string;
         risk: number;
         primary_failure_source: string | null;
-        failing_dimensions: number;
         total_dimensions: number;
     };
-    dimensions: {
-        data_integrity: DimensionResult;
-        target_validity: DimensionResult;
-        sample_adequacy: DimensionResult;
-    };
+    dimensions: Record<string, DimensionResult>;
 }
 
 export interface Layer1KeyFacts {
