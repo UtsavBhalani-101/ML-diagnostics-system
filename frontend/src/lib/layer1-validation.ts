@@ -15,6 +15,7 @@ export interface ValidationCheck {
     rule: string;
     impact: ImpactLevel;
     reason: string;
+    reasonPairs: Array<{label: string; value: string}>;
     action: string;
     optionalAction?: string;
     offendingColumns: string[];
@@ -110,6 +111,41 @@ function formatValue(value: unknown): string {
     return String(value);
 }
 
+function formatDetailValue(value: unknown): string {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "number") {
+        if (Number.isInteger(value)) return value.toLocaleString();
+        return value.toFixed(4);
+    }
+    if (Array.isArray(value)) {
+        if (value.length === 0) return "None";
+        return value.map((v) => formatDetailValue(v)).join(", ");
+    }
+    if (typeof value === "object") {
+        const entries = Object.entries(value as Record<string, unknown>);
+        if (entries.length === 0) return "—";
+        if (entries.length <= 6) {
+            return entries.map(([k, v]) => `${k}: ${formatDetailValue(v)}`).join(", ");
+        }
+        return `${entries.length} entries`;
+    }
+    return String(value);
+}
+
+function buildDetailPairs(detail: Record<string, unknown> | null): Array<{label: string; value: string}> {
+    if (!detail) return [];
+
+    const exclude = new Set(["observed", "threshold", "impact"]);
+
+    return Object.entries(detail)
+        .filter(([k]) => !exclude.has(k))
+        .map(([k, v]) => ({
+            label: k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            value: formatDetailValue(v),
+        }));
+}
+
 /**
  * Converts a single engine CheckResult into a frontend ValidationCheck.
  * This is the key decoupling point — we take whatever the engine sends
@@ -122,6 +158,7 @@ function mapCheck(
 ): ValidationCheck {
     const status = mapLabelToStatus(check.label);
     const impact = mapImpact(check.impact);
+    const reasonPairs = buildDetailPairs(check.detail);
 
     return {
         id: `${dimensionKey}.${check.name ?? index}`,
@@ -133,11 +170,10 @@ function mapCheck(
         threshold: formatValue(check.threshold),
         rule: `${check.name ?? "check"}: ${check.label ?? "unknown"}`,
         impact,
-        reason: check.detail
-            ? Object.entries(check.detail)
-                .map(([k, v]) => `${k}: ${formatValue(v)}`)
-                .join("; ")
+        reason: reasonPairs.length > 0
+            ? reasonPairs.map((p) => `${p.label}: ${p.value}`).join(" · ")
             : "No detail provided.",
+        reasonPairs,
         action: status === "FAIL"
             ? `Address ${check.name ?? "this issue"} before proceeding.`
             : status === "WARNING"

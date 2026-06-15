@@ -456,7 +456,23 @@ function FailureItem({ failure }: { failure: ValidationCheck }) {
 
             <div className="diag-body grid gap-4 p-5 md:grid-cols-2">
                 <BreakdownField label="What failed" value={`${failure.observed}; threshold ${failure.threshold}`} />
-                <BreakdownField label="Why it failed" value={failure.reason} />
+                <div>
+                    <p className="diag-muted mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
+                        Why it failed
+                    </p>
+                    {failure.reasonPairs.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3">
+                            {failure.reasonPairs.map((pair) => (
+                                <div key={pair.label}>
+                                    <p className="diag-muted text-[10px] uppercase tracking-wide">{pair.label}</p>
+                                    <p className="diag-text mt-0.5 font-mono text-xs font-medium">{pair.value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="diag-muted text-sm">No additional detail.</p>
+                    )}
+                </div>
                 <BreakdownField label="Rule violated" value={failure.rule} />
                 <BreakdownField label="Direct action" value={failure.action} />
             </div>
