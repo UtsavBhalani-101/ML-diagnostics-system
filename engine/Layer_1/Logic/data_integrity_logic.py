@@ -65,12 +65,17 @@ def global_missing_risk(sm):
     else:
         label = "CRITICAL"
 
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="global_missing_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "<0.05 safe / <0.20 warning / >=0.20 critical",
+            "impact": impact,
             "missing_ratio": round(ratio, 4),
             "missing_cells": missing_cells,
             "total_cells": total_cells
@@ -92,6 +97,7 @@ def column_missing_risk(sm):
 
     flagged = {col: round(r, 4) for col, r in per_column.items() if r > 0.05}
     worst_col = max(per_column, key=per_column.get)
+    impact = "BLOCKER"
 
     return Logic_Structure(
         dimension=DIMENSION,
@@ -99,6 +105,9 @@ def column_missing_risk(sm):
         label=label,
         risk=round(worst, 4),
         metrics={
+            "observed": round(worst, 4),
+            "threshold": "<0.05 safe / <0.20 warning / >=0.20 critical (worst column)",
+            "impact": impact,
             "worst_column": worst_col,
             "worst_ratio": round(worst, 4),
             "flagged_columns": flagged,
@@ -117,12 +126,17 @@ def duplicate_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     else:
         label = "CRITICAL"
 
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="duplicate_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "<0.02 safe / <0.15 warning / >=0.15 critical",
+            "impact": impact,
             "duplicate_risk": round(ratio, 4),
             "duplicate_rows": round(ratio * sm["duplicated_ratio"].meta["num_rows"]),
             "total_rows": sm["duplicated_ratio"].meta["num_rows"]
@@ -142,12 +156,17 @@ def constant_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     else:
         label = "CRITICAL"
 
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="constant_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "0 safe / <0.20 warning / >=0.20 critical",
+            "impact": impact,
             "constant_columns": data["columns"],  # actual names
             "ratio": round(data["ratio"], 4),
             "count": len(data["columns"])
@@ -163,7 +182,12 @@ def hidden_missing_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
             name="hidden_missing_risk",
             label="SAFE",
             risk=0.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": "<0.05 safe / <0.15 warning / >=0.15 critical",
+                "impact": "INFORMATIONAL",
+            }
         )
 
     data = get_value(sm, "hidden_missing_ratio")
@@ -176,19 +200,25 @@ def hidden_missing_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
         label = "WARNING"
     else:
         label = "CRITICAL"
-        
+
     flagged = {col: round(r, 4) for col, r in per_column.items() if r > 0.0}
     worst_col = max(per_column, key=per_column.get)
+    impact = "BLOCKER"
 
     return Logic_Structure(
         dimension=DIMENSION,
         name="hidden_missing_risk",
         label=label,
         risk=round(worst, 4),
-        metrics = {"worst_columns" : worst_col,
-                   "worst_ratio" : round(worst, 4),
-                   "flagged_columns" : flagged,
-                   "total_columns" : len(per_column)}
+        metrics={
+            "observed": round(worst, 4),
+            "threshold": "<0.05 safe / <0.15 warning / >=0.15 critical",
+            "impact": impact,
+            "worst_columns": worst_col,
+            "worst_ratio": round(worst, 4),
+            "flagged_columns": flagged,
+            "total_columns": len(per_column)
+        }
     )
 
 
@@ -200,7 +230,12 @@ def mixed_type_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
             name="mixed_type_risk",
             label="SAFE",
             risk=0.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": "0 safe / <0.05 warning / >=0.05 critical",
+                "impact": "INFORMATIONAL",
+            }
         )
 
     data = get_value(sm, "mixed_type_columns_ratio")
@@ -213,12 +248,17 @@ def mixed_type_risk(sm: Dict[str, Signal_Structure]) -> Logic_Structure:
     else:
         label = "CRITICAL"
 
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="mixed_type_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "0 safe / <0.05 warning / >=0.05 critical",
+            "impact": impact,
             "mixed_columns": data["columns"],
             "ratio": round(data["ratio"], 4),
             "number of columns": len(data["columns"])

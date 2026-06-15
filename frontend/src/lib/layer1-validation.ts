@@ -135,8 +135,8 @@ function mapCheck(
         impact,
         reason: check.detail
             ? Object.entries(check.detail)
-                  .map(([k, v]) => `${k}: ${formatValue(v)}`)
-                  .join("; ")
+                .map(([k, v]) => `${k}: ${formatValue(v)}`)
+                .join("; ")
             : "No detail provided.",
         action: status === "FAIL"
             ? `Address ${check.name ?? "this issue"} before proceeding.`

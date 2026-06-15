@@ -18,28 +18,36 @@ def _format_dimension(name: str, dim: Dict[str, Any]) -> Dict[str, Any]:
     # Map raw logic results to the new 'checks' format
     # Note: We expect 'raw_results' to be added to the logic output in the next stage
     raw_results = dim.get("raw_results", [])
-    
+
     checks = []
     for r in raw_results:
-        # If r is a dict (serialized Logic_Structure)
-        checks.append({
-            "name": r.get("name"),
-            "label": r.get("label"),
-            "risk": r.get("risk"),
-            "threshold": r.get("metrics", {}).get("threshold"),
-            "observed": r.get("metrics", {}).get("observed"),
-            "impact": r.get("metrics", {}).get("impact"),
-            "detail": r.get("metrics", {})
-        })
+        # If r is a dict (serialized Logic_Structure).
+        # Primary source for observed/threshold/impact is metrics (populated by each logic function).
+        # The or-fallback to the top-level key is a safety net for any future check that
+        # forgets to include those fields in its metrics dict.
+        m = r.get("metrics") or {}
+        checks.append(
+            {
+                "name": r.get("name"),
+                "label": r.get("label"),
+                "risk": r.get("risk"),
+                "threshold": m.get("threshold") if m.get("threshold") is not None else r.get("threshold"),
+                "observed": m.get("observed") if m.get("observed") is not None else r.get("observed"),
+                "impact": m.get("impact") if m.get("impact") is not None else r.get("impact"),
+                "detail": m,
+            }
+        )
 
     return {
         "status": dim.get("status"),
-        "composite_risk": dim.get("total_risk"), # Mapping old total_risk to new name for now
+        "composite_risk": dim.get(
+            "total_risk"
+        ),  # Mapping old total_risk to new name for now
         "peak_risk": dim.get("peak_risk", dim.get("total_risk")),
         "critical": dim.get("critical", []),
         "warnings": dim.get("warnings", []),
         "checks": checks,
-        "interpretation": dim.get("interpretation")
+        "interpretation": dim.get("interpretation"),
     }
 
 
@@ -47,22 +55,30 @@ def _format_dimension(name: str, dim: Dict[str, Any]) -> Dict[str, Any]:
 # OVERALL AGGREGATION
 # -------------------------
 def _compute_overall(dimensions: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    risks = [d["composite_risk"] for d in dimensions.values() if d["composite_risk"] is not None]
+    risks = [
+        d["composite_risk"]
+        for d in dimensions.values()
+        if d["composite_risk"] is not None
+    ]
     statuses = [d["status"] for d in dimensions.values()]
-    
+
     ranked_dimensions = sorted(
         dimensions.items(),
         key=lambda item: item[1]["composite_risk"] or 0,
         reverse=True,
     )
-    
+
     top_dimension_name = ranked_dimensions[0][0] if ranked_dimensions else None
-    top_dimension_risk = ranked_dimensions[0][1]["composite_risk"] if ranked_dimensions else 0.0
+    top_dimension_risk = (
+        ranked_dimensions[0][1]["composite_risk"] if ranked_dimensions else 0.0
+    )
 
     overall = {
         "risk": max(risks) if risks else 0.0,
         "status": worst_status(statuses),
-        "primary_failure_source": top_dimension_name if top_dimension_risk > 0 else None,
+        "primary_failure_source": top_dimension_name
+        if top_dimension_risk > 0
+        else None,
         "total_dimensions": len(dimensions),
     }
 
@@ -109,7 +125,7 @@ if __name__ == "__main__":
             "dimensions": {
                 "data_integrity": {
                     "status": "STOP",
-                    "total_risk": 0.65, # composite
+                    "total_risk": 0.65,  # composite
                     "peak_risk": 0.85,
                     "critical": ["missing_values"],
                     "warnings": ["mixed_types"],
@@ -119,15 +135,23 @@ if __name__ == "__main__":
                             "name": "missing_values",
                             "label": "CRITICAL",
                             "risk": 0.85,
-                            "metrics": {"threshold": 0.2, "observed": 0.45, "impact": "blocker"}
+                            "metrics": {
+                                "threshold": 0.2,
+                                "observed": 0.45,
+                                "impact": "blocker",
+                            },
                         },
                         {
                             "name": "mixed_types",
                             "label": "WARNING",
                             "risk": 0.3,
-                            "metrics": {"threshold": 0.05, "observed": 0.08, "impact": "degrading"}
-                        }
-                    ]
+                            "metrics": {
+                                "threshold": 0.05,
+                                "observed": 0.08,
+                                "impact": "degrading",
+                            },
+                        },
+                    ],
                 }
             }
         }
@@ -137,6 +161,7 @@ if __name__ == "__main__":
     try:
         final_result = format_final_output(mock_raw_data)
         import json
+
         print(json.dumps(final_result, indent=4))
     except Exception as e:
         print(f"Formatter failed: {e}")

@@ -64,23 +64,28 @@ def validate_signals_contract(signal_map: Dict[str, Signal_Structure]):
 def duplicated_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["duplicated_ratio"]
     ratio = get_value(signal_map, "duplicated_ratio")
-    
+
     if ratio >= 0.5:
         label = "CRITICAL"
     elif ratio >= 0.2:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="duplicated_risk",
         label=label,
         risk=round(float(ratio), 4),
         metrics={
-            "total_rows" : signal.meta["total_rows"],
-            "duplicate_rows" : signal.meta["duplicate_rows"],
-            "unique_rows" : signal.meta["unique_rows"]
+            "observed": round(float(ratio), 4),
+            "threshold": "<0.20 safe / <0.50 warning / >=0.50 critical",
+            "impact": impact,
+            "total_rows": signal.meta["total_rows"],
+            "duplicate_rows": signal.meta["duplicate_rows"],
+            "unique_rows": signal.meta["unique_rows"]
         }
     )
 
@@ -92,25 +97,35 @@ def effective_sample_size_risk(signal_map: Dict[str, Signal_Structure]) -> Logic
             name="effective_sample_size_risk",
             label="CRITICAL",
             risk=1.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": "risk=e^(-score); >0.80 critical / >0.50 warning",
+                "impact": "BLOCKER",
+            }
         )
 
     score = get_value(signal_map, "effective_sample_size")
     risk = float(np.exp(-score))
-    
+
     if risk > 0.8:
         label = "CRITICAL"
     elif risk > 0.5:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="effective_sample_size_risk",
         label=label,
         risk=round(risk, 4),
         metrics={
+            "observed": round(signal.meta["avg_nn_distance"], 4),
+            "threshold": "avg_nn_distance; higher = more spread = better",
+            "impact": impact,
             "avg_nn_distance": signal.meta["avg_nn_distance"],
             "sample_size_used": signal.meta["sample_size_used"],
             "total_rows": signal.meta["total_rows"],
@@ -126,25 +141,35 @@ def sample_dependency_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Str
             name="sample_dependency_risk",
             label="CRITICAL",
             risk=1.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": "risk=e^(-score); >0.80 critical / >0.50 warning",
+                "impact": "BLOCKER",
+            }
         )
 
     score = get_value(signal_map, "sample_dependency_score")
     risk = float(np.exp(-score))
-    
+
     if risk > 0.8:
         label = "CRITICAL"
     elif risk > 0.5:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="sample_dependency_risk",
         label=label,
         risk=round(risk, 4),
         metrics={
+            "observed": round(signal.meta["avg_step_distance"], 4),
+            "threshold": "avg_step_distance; higher = less dependent = better",
+            "impact": impact,
             "avg_step_distance": signal.meta["avg_step_distance"],
             "total_rows": signal.meta["total_rows"],
             "feature_count": signal.meta["feature_count"]
@@ -160,25 +185,35 @@ def feature_variance_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Stru
             name="feature_variance_risk",
             label="SAFE",
             risk=0.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": "<0.20 safe / <0.50 warning / >=0.50 critical (low-variance ratio)",
+                "impact": "INFORMATIONAL",
+            }
         )
 
     ratio = get_value(signal_map, "feature_variance_score")
     risk = float(ratio)
-    
+
     if risk >= 0.5:
         label = "CRITICAL"
     elif risk >= 0.2:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="feature_variance_risk",
         label=label,
         risk=round(risk, 4),
         metrics={
+            "observed": round(signal.meta["low_variance_ratio"], 4),
+            "threshold": "<0.20 safe / <0.50 warning / >=0.50 critical (low-variance ratio)",
+            "impact": impact,
             "low_variance_ratio": signal.meta["low_variance_ratio"],
             "low_variance_columns": signal.meta["low_variance_columns"],
             "low_variance_count": signal.meta["low_variance_count"],
@@ -195,25 +230,35 @@ def marginal_coverage_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Str
             name="marginal_coverage_risk",
             label="CRITICAL",
             risk=1.0,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": 0.0,
+                "threshold": ">=0.70 safe / >=0.40 warning / <0.40 critical (avg bin coverage)",
+                "impact": "BLOCKER",
+            }
         )
 
     coverage = get_value(signal_map, "marginal_coverage")
     risk = float(1.0 - coverage)
-    
+
     if risk >= 0.6:
         label = "CRITICAL"
     elif risk >= 0.3:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="marginal_coverage_risk",
         label=label,
         risk=round(risk, 4),
         metrics={
+            "observed": round(float(coverage), 4),
+            "threshold": ">=0.70 safe / >=0.40 warning / <0.40 critical (avg bin coverage)",
+            "impact": impact,
             "avg_bin_coverage": signal.meta["avg_bin_coverage"],
             "per_column_coverage": signal.meta["per_column_coverage"],
             "bins_used": signal.meta["bins_used"],
@@ -227,30 +272,41 @@ def joint_coverage_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Struct
         reason = str(signal.meta.get("reason", ""))
         risk = 0.0 if "insufficient features" in reason else 0.5
         label = "SAFE" if risk == 0.0 else "WARNING"
+        impact = "INFORMATIONAL" if label == "SAFE" else "DEGRADING"
         return Logic_Structure(
             dimension=DIMENSION,
             name="joint_coverage_risk",
             label=label,
             risk=risk,
-            metrics=signal.meta
+            metrics={
+                **signal.meta,
+                "observed": round(1.0 - risk, 4),
+                "threshold": ">=0.60 safe / >=0.30 warning / <0.30 critical (joint grid fill)",
+                "impact": impact,
+            }
         )
 
     coverage = get_value(signal_map, "joint_coverage")
     risk = float(1.0 - coverage)
-    
+
     if risk >= 0.7:
         label = "CRITICAL"
     elif risk >= 0.4:
         label = "WARNING"
     else:
         label = "SAFE"
-        
+
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="joint_coverage_risk",
         label=label,
         risk=round(risk, 4),
         metrics={
+            "observed": round(float(coverage), 4),
+            "threshold": ">=0.60 safe / >=0.30 warning / <0.30 critical (joint grid fill)",
+            "impact": impact,
             "grid_fill": signal.meta["grid_fill"],
             "columns_used": signal.meta["columns_used"],
             "bins_used": signal.meta["bins_used"],

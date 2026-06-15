@@ -81,12 +81,17 @@ def missing_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     else:
         label = "SAFE"
 
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="missing_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "<=0.10 safe / <=0.40 warning / >0.40 critical (target missing ratio)",
+            "impact": impact,
             "missing_ratio": round(ratio, 4),
             "total_samples": samples,
             "missing_count": signal.meta["missing_count"]
@@ -104,14 +109,19 @@ def target_degeneracy_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Str
     else:
         label = "SAFE"
 
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="target_degeneracy_risk",
         label=label,
         risk=float(flag),
         metrics={
+            "observed": float(flag),
+            "threshold": "False (0) = safe; True (1) = critical (is target degenerate)",
+            "impact": impact,
             "is_degenerate": flag,
-            "unique_value" : value_count
+            "unique_value": value_count
         }
     )
 
@@ -127,12 +137,17 @@ def dominant_class_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Struct
     else:
         label = "SAFE"
 
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="dominance_class_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "<=0.80 safe / <=0.95 warning / >0.95 critical (dominant class ratio)",
+            "impact": impact,
             "dominant_class": signal.meta["dominant_class"],
             "dominant_ratio": ratio,
             "dominant_count": signal.meta["dominant_count"],
@@ -160,12 +175,17 @@ def target_entropy_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Struct
     else:
         label = "CRITICAL"
 
+    impact = "DEGRADING"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="target_entropy_risk",
         label=label,
-        risk=round((1 - normalized_entropy) , 4),
+        risk=round((1 - normalized_entropy), 4),
         metrics={
+            "observed": round(normalized_entropy, 4),
+            "threshold": ">=0.80 safe / >=0.50 warning / <0.50 critical (normalised entropy)",
+            "impact": impact,
             "raw_entropy": round(entropy, 4),
             "normalized_entropy": round(normalized_entropy, 4),
             "num_classes": num_classes,
@@ -177,7 +197,7 @@ def target_entropy_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Struct
 def type_contamination_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_Structure:
     signal = signal_map["type_contamination_ratio"]
     ratio = signal.value
-    
+
     if ratio > 0.1:
         label = "CRITICAL"
     elif ratio > 0.05:
@@ -185,12 +205,17 @@ def type_contamination_risk(signal_map: Dict[str, Signal_Structure]) -> Logic_St
     else:
         label = "SAFE"
 
+    impact = "BLOCKER"
+
     return Logic_Structure(
         dimension=DIMENSION,
         name="type_contamination_risk",
         label=label,
         risk=round(ratio, 4),
         metrics={
+            "observed": round(ratio, 4),
+            "threshold": "<=0.05 safe / <=0.10 warning / >0.10 critical (type contamination ratio)",
+            "impact": impact,
             "contamination_ratio": round(ratio, 4),
             "contaminated_count": signal.meta["contaminated_count"],
             "major_type": signal.meta["major_type"],
